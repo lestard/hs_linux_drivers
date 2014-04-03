@@ -6,7 +6,7 @@
 
 MODULE_AUTHOR("Manuel Mauky");
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Driver with major version number");
+MODULE_DESCRIPTION("Driver with device number");
 MODULE_SUPPORTED_DEVICE("none");
 
 #define MODULENAME "ueb3"
