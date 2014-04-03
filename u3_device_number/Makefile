@@ -1,6 +1,6 @@
 
 # Name des Treibers
-DRIVER_NAME = ueb2
+DRIVER_NAME = ueb3
 
 
 ifneq ($(KERNELRELEASE),)
