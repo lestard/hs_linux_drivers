@@ -8,7 +8,7 @@ int main(int argc, char* argv[])
 
 	printf("Using Driver\n");
 
-	FILE* file = fopen("/dev/ueb4","r");
+	FILE* file = fopen("/dev/ueb4_device","r");
 
 	//fseek(file, SEEK_SET, 0);
 	

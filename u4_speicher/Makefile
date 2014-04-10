@@ -23,9 +23,10 @@ devices: removeDevices
 
 #Muss als su ausgeführt werden
 # Entfernt das Treibermodul und löscht die Device-Datei
+# durch || true wird verhindert, dass das Make-script abbricht, wenn das modul bereits entfernt wurde
 removeDevices:
 	rm -f /dev/$(DRIVER_NAME)
-	rmmod $(DRIVER_NAME) || true	# durch || true wird verhindert, dass das Make-script abbricht, wenn das modul bereits entfernt wurde
+	rmmod $(DRIVER_NAME) || true	
 
 # Löscht alle unnötigen Build-Artefakte
 clean:
@@ -36,3 +37,4 @@ clean:
 	rm -f .*.cmd
 	rm -f *.ko
 	rm -f *.mod.c
+	rm -f *.out

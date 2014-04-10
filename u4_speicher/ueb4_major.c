@@ -7,25 +7,19 @@
 
 MODULE_AUTHOR("Manuel Mauky");
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Driver with device number that can read and write");
+MODULE_DESCRIPTION("Driver with major number that can read and write from/to memory");
 MODULE_SUPPORTED_DEVICE("none");
 
-#define MODULENAME "ueb4_device"
+#define MODULENAME "ueb4_major"
 
 
-static dev_t template_dev_number;
-static struct cdev *driver_object;
-struct class *template_class;
+static int major_number;
 
-static int length = 1024;
-
-
+static char array[1024];
 unsigned long ret;
 
-
-static char *array; 
-
 int min;
+
 
 static int open(struct inode *deviceFile, struct file *filePointer)
 {
@@ -38,7 +32,6 @@ static ssize_t read(struct file *filePointer, char *buff, size_t count, loff_t *
 {
 	printk("Speicher-Treiber. Read\n");
 
-	
 	min = min(strlen(array), count); 
 
 	ret = copy_to_user(buff,array, min);
@@ -49,10 +42,6 @@ static ssize_t read(struct file *filePointer, char *buff, size_t count, loff_t *
 static ssize_t write(struct file *filePointer, const char *buff, size_t count, loff_t *offPointer )
 {
 	printk("Speicher-Treiber. Write\n");
-
-		
-	array = kmalloc(length, GFP_KERNEL);
-	
 	
 	ret = copy_from_user(array, buff, count);
 	
@@ -81,41 +70,15 @@ static struct file_operations fops = {
 
 static int __init mod_init(void)
 {
-
-	if( alloc_chrdev_region(&template_dev_number,0,1,MODULENAME) < 0 )
-	{
-		return -EIO;
-	}
-	
-	driver_object = cdev_alloc();
-	if(driver_object==NULL)
-	{
-		unregister_chrdev_region(template_dev_number, 1);
-		return -EIO;
-	}
-
-	driver_object->owner = THIS_MODULE;
-	driver_object->ops = &fops;
-
-	if(cdev_add(driver_object, template_dev_number,1))
-	{
-		kobject_put(&driver_object->kobj);
-		unregister_chrdev_region(template_dev_number, 1);
-		return -EIO;
-	}
-
-	template_class = class_create(THIS_MODULE, MODULENAME);
-	device_create(template_class, NULL, template_dev_number, NULL, "%s", MODULENAME);
-
+	major_number = register_chrdev(0, "Treiber-Test", &fops);
+	printk("mini. Driver was registered with Major-Nr: %d\n", major_number);
 	return 0;
 }
 
 static void __exit mod_exit(void)
 {	
-	device_destroy(template_class, template_dev_number);
-	class_destroy(template_class);
-	cdev_del(driver_object);
-	unregister_chrdev_region(template_dev_number, 1);
+	unregister_chrdev(major_number, "Treiber-Test");
+	printk("mini. unregistering driver with major-nr: %d\n", major_number);
 	return;
 }
 
