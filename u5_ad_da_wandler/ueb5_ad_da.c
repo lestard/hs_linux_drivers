@@ -3,6 +3,7 @@
 #include <linux/uaccess.h>
 #include <linux/pci.h>
 
+
 MODULE_AUTHOR("Manuel Mauky");
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Driver für AD/DA Wandlerkarte NuDAQ PCI-9111HR");
@@ -64,6 +65,7 @@ static char *pt;
 
 static int __devinit device_init(struct pci_dev *pdev, const struct pci_device_id *id){
 	
+
 	printk("MYPCI device_init\n");
 	
 	if(pci_enable_device(pdev)){
@@ -84,6 +86,15 @@ static int __devinit device_init(struct pci_dev *pdev, const struct pci_device_i
 	pt = (char*) memstart ;
 
 	
+	// Auswahl des Kanals fuer den Multiplexer
+	outb(0, ioport + REGISTER_AD_CHANNEL_CONTROL);	
+
+	// Bereich -10 v ... +10 v waehlen
+	outb(AD_B_10_V, ioport + REGISTER_INPUT_SIGNAL_RANGE);
+
+	// AD-Trigger-Mode: Interne Quelle, Software Trigger
+	outb(1, ioport + REGISTER_TRIGGER_MODE_CONTROL);
+
 	printk("MYPCI - Device init erfolgreich\n");
 
 	return 0;
@@ -118,10 +129,54 @@ static struct pci_driver pci_driver = {
 
 
 static ssize_t read(struct file *filePointer, char *buff, size_t count, loff_t *offPointer )
-{
-	printk("Speicher-Treiber. Read\n");
+{	
+	int i;
+	int ret;
+	int min;
+	int input;
+	int ergebnis = 0;
+	char array[100];
 
-	return 0;
+	char status = 0;
+
+	printk("MYPCI - Read\n");
+
+	
+	outb(1, ioport + REGISTER_SOFTWARE_TRIGGER);
+	
+	i = 0;
+	
+	while(i < 100000) {
+		i++;
+		printk("I: %i\n", i);
+		
+		status = 0;	
+		status = inb(ioport + 0x08);
+
+		if((status & 0x80) != 0){
+			printk("Fertig umgewandelt\n");
+			break;
+		}else {
+			printk("status:, >%i< \n", (status & 0x80));
+		}
+	}
+
+
+	input= inw(ioport);
+	
+	printk("Input gelesen: %X \n", input);
+
+
+
+
+
+	printk("Ergebnis: %d \n", ergebnis);
+	
+	min = min(strlen(array), count);
+		
+	ret = copy_to_user(buff, array, min);
+
+	return (count - ret);
 }
 
 static ssize_t write(struct file *filePointer, __user const char *userbuffer, size_t count, loff_t *offPointer )
@@ -203,7 +258,7 @@ static ssize_t write(struct file *filePointer, __user const char *userbuffer, si
 	}
 
 
-	outw(ergebnis, ioport);
+	//outw(ergebnis, ioport);
 
 	printk("\nVorkommazahl: %d \n", vorkommazahl);
 	printk("Nachkommazahl: %d \n", nachkommazahl);
