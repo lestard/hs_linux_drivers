@@ -1,14 +1,7 @@
-
-//#include <linux/init.h>
-//#include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
-//#include <linux/device.h>
-//#include <linux/version.h>
 #include <linux/uaccess.h>
 #include <linux/pci.h>
-//#include <linux/interrupt.h>
-//#include <linux/unistd.h>
 
 MODULE_AUTHOR("Manuel Mauky");
 MODULE_LICENSE("GPL");
@@ -88,38 +81,12 @@ static int __devinit device_init(struct pci_dev *pdev, const struct pci_device_i
 		return -EIO;
 	}
 
-/*
-	memstart = pci_resource_start( pdev, 2 );
-	memlen = pci_resource_len( pdev, 2 );
-	if( request_mem_region(memstart,memlen,pdev->dev.kobj.name)==NULL ) {
-		printk("MYPCI - error Memory address conflict\n");
-		dev_err(&pdev->dev,"Memory address conflict for device\n");
-		goto cleanup_ports;
-	}
-	
-
-	
-
-*/
-
 	pt = (char*) memstart ;
-
-/*
-	pt[REGISTER_AD_CHANNEL_CONTROL] = 0;
-	
-	pt[REGISTER_INPUT_SIGNAL_RANGE] = AD_B_10_V;
-*/	
 
 	
 	printk("MYPCI - Device init erfolgreich\n");
 
 	return 0;
-
-//cleanup_mem:
-//	release_mem_region( memstart, memlen );
-cleanup_ports:
-	release_region( ioport, iolen );
-	return -EIO;
 }
 
 static void device_deinit(struct pci_dev *dev){
@@ -147,39 +114,104 @@ static struct pci_driver pci_driver = {
 
 
 
-static char array[1024];
-unsigned long ret;
 
 
 
 static ssize_t read(struct file *filePointer, char *buff, size_t count, loff_t *offPointer )
 {
-	int min;
-
 	printk("Speicher-Treiber. Read\n");
 
-	min = min(strlen(array), count); 
-
-	ret = copy_to_user(buff,array, min);
-
-	return (count-ret);
+	return 0;
 }
 
-static ssize_t write(struct file *filePointer, const char *buff, size_t count, loff_t *offPointer )
+static ssize_t write(struct file *filePointer, __user const char *userbuffer, size_t count, loff_t *offPointer )
 {
+
+	char buffer[12];
+	char vorkomma[12];
+	char nachkomma[12];
+
+	int wert = 0;
+	int vorkommazahl = 0;
+	int nachkommazahl = 0;
+	
+	int kommaposition = -1;
+	int stellen = 0;
+	int potenz = 1;
+
+	int ergebnis = 0;
+	int i;
+	int ret;
+
 	printk("Speicher-Treiber. Write\n");
-	
-	ret = copy_from_user(array, buff, count);
-	
-	array[count - ret + 1] = 0;
-	
-	
-	printk("Schicke den Wert %d an den DA-Wandler\n");
 
-	pt[0] = 
-	
 
-	return (count-ret);
+	if(count > sizeof(buffer)){
+		count = sizeof(buffer);
+	}
+
+	ret = copy_from_user(buffer, userbuffer, count);
+	
+	for(i=0 ; i<sizeof(buffer); i++){
+		if(buffer[i] == '.' || buffer[i] == ','){
+			kommaposition = i;
+		}
+	}
+
+	if(kommaposition > -1){
+		for(i=0 ; i<kommaposition ; i++){
+			vorkomma[i] = buffer[i];
+		}	
+
+		vorkomma[sizeof(vorkomma) - 1] = '\0';
+
+
+		for(i=kommaposition+1 ; i<sizeof(buffer) && buffer[i]>='0' && buffer[i]<='9' ; i++){
+			nachkomma[i-kommaposition-1] = buffer[i];
+		}
+
+		for(i=0 ; i<sizeof(nachkomma) ; i++){
+			if(nachkomma[i] != '\0'){
+				stellen = i+1;
+			}
+		}
+
+		for(i=0 ; i<stellen ; i++){
+			potenz *= 10;			
+		}
+
+		vorkommazahl = simple_strtol(vorkomma, NULL, 10);
+		nachkommazahl = simple_strtoul(nachkomma, NULL, 10);
+	} else {
+		vorkommazahl = simple_strtol(buffer, NULL, 10);
+	}	
+
+		
+	if(buffer[0] == '-'){
+		nachkommazahl *= -1;
+	}
+
+	if(vorkommazahl > 9 || vorkommazahl < -9){
+		if(vorkommazahl > 9){
+			ergebnis = 0xfff;
+		}else {
+			ergebnis = 0x000;
+		}
+	} else {
+		wert = ((vorkommazahl + 10) * potenz) + nachkommazahl;
+		ergebnis = (((wert * 4096) / 20) / potenz);
+	}
+
+
+	outw(ergebnis, ioport);
+
+	printk("\nVorkommazahl: %d \n", vorkommazahl);
+	printk("Nachkommazahl: %d \n", nachkommazahl);
+	printk("Potenz: %d \n", potenz);
+	printk("Rechenwert: %d \n", wert);
+	printk("Ausgabewert: %X \n", ergebnis);
+
+	return count;
 }
 
 
