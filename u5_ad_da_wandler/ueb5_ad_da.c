@@ -33,15 +33,6 @@ MODULE_SUPPORTED_DEVICE("none");
 #define REGISTER_8254_CONTROL 			0x46
 #define REGISTER_INTERRUPT_CLEAR 		0x48
 
-#define PTRG_OFF 		(0 << 3)
-#define PTRG_ON 		(1 << 3)
-#define EITS_EXTERNAL 		(1 << 2)
-#define EITS_INTERNAL 		(0 << 2)
-#define TPST_SOFTWARE_TRIGGER 	(0 << 1)
-#define TPST_TIMER_PACER 	(1 << 1)
-#define ASCAN_ON 		(1 << 0)
-#define ASCAN_OFF 		(0 << 0)
-
 
 #define AD_B_10_V	0
 #define AD_B_5_V	1
@@ -131,7 +122,7 @@ static struct pci_driver pci_driver = {
 static ssize_t read(struct file *filePointer, char *buff, size_t count, loff_t *offPointer )
 {	
 	int i;
-	int input;
+	short input;
 	int timeout=0;	
 
 	int status = 0;
