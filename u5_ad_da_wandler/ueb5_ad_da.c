@@ -86,13 +86,13 @@ static int __devinit device_init(struct pci_dev *pdev, const struct pci_device_i
 	pt = (char*) memstart ;
 
 	
-	// Auswahl des Kanals fuer den Multiplexer
+	// Auswahl des Kanals fuer den Multiplexer 0x06
 	outb(0, ioport + REGISTER_AD_CHANNEL_CONTROL);	
 
-	// Bereich -10 v ... +10 v waehlen
+	// Bereich -10 v ... +10 v waehlen  0x08
 	outb(AD_B_10_V, ioport + REGISTER_INPUT_SIGNAL_RANGE);
 
-	// AD-Trigger-Mode: Interne Quelle, Software Trigger
+	// AD-Trigger-Mode: Interne Quelle, Software Trigger 0x0A
 	outb(1, ioport + REGISTER_TRIGGER_MODE_CONTROL);
 
 	printk("MYPCI - Device init erfolgreich\n");
@@ -131,52 +131,57 @@ static struct pci_driver pci_driver = {
 static ssize_t read(struct file *filePointer, char *buff, size_t count, loff_t *offPointer )
 {	
 	int i;
-	int ret;
-	int min;
 	int input;
-	int ergebnis = 0;
-	char array[100];
+	int timeout=0;	
 
-	char status = 0;
+	int status = 0;
 
 	printk("MYPCI - Read\n");
 
+		
+	status = inb(ioport + 0x08);
+
+	if((status & 0x10) != 0) {
+		printk("fifo not empty");
+		
+		while((inb(ioport + 0x08) & 0x10) != 0){
+			if(timeout == 100)
+				break;
+			timeout++;
+			
+			inw(ioport);
+		}
+	}
+
 	
+	// 0x0E
 	outb(1, ioport + REGISTER_SOFTWARE_TRIGGER);
 	
 	i = 0;
 	
 	while(i < 100000) {
 		i++;
-		printk("I: %i\n", i);
 		
 		status = 0;	
 		status = inb(ioport + 0x08);
 
+		msleep(10);
+
 		if((status & 0x80) != 0){
-			printk("Fertig umgewandelt\n");
 			break;
-		}else {
-			printk("status:, >%i< \n", (status & 0x80));
 		}
 	}
 
 
 	input= inw(ioport);
 	
-	printk("Input gelesen: %X \n", input);
+	printk("Input gelesen: %i \n", input);
 
+	if(copy_to_user(buff, &input, sizeof(input)) != 0){
+		printk("write error");
+	}
 
-
-
-
-	printk("Ergebnis: %d \n", ergebnis);
-	
-	min = min(strlen(array), count);
-		
-	ret = copy_to_user(buff, array, min);
-
-	return (count - ret);
+	return sizeof(input);
 }
 
 static ssize_t write(struct file *filePointer, __user const char *userbuffer, size_t count, loff_t *offPointer )
@@ -258,7 +263,7 @@ static ssize_t write(struct file *filePointer, __user const char *userbuffer, si
 	}
 
 
-	//outw(ergebnis, ioport);
+	outw(ergebnis, ioport);
 
 	printk("\nVorkommazahl: %d \n", vorkommazahl);
 	printk("Nachkommazahl: %d \n", nachkommazahl);

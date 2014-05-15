@@ -4,34 +4,44 @@
 
 int main(int argc, char* argv[])
 {
-	int i;
 
 	printf("Using Driver\n");
 
 	FILE* file = fopen("/dev/ueb5_ad_da","r");
 
 	//fseek(file, SEEK_SET, 0);
-	
-	char buffer[3];
 
-		
-	/**
-	for(i=0 ; ; i++)
-	{
-		fread(&buffer[i], 1, 1, file);
-		if(buffer[i] == 0)
-		{
-			break;
-		}
+	int input = 0;
+
+	float faktor = 3320.0; // der Faktor zur Umrechnung von gelesenem Wert in Volt.
+	
+	float ergebnis = 0.0;
+
+
+	fread(&input, sizeof(input), 1, file);
+	
+	
+	
+	printf("gelesen: >%d<\n", input);
+
+	if(input < 0){
+		printf("Fehler. Gelesener Wert sollte eigentlich nicht kleiner als 0 sein");
 	}
-	*/
+
+	if(input < 32768){
+		printf("positiv");
+		// positiver bereich	
+		ergebnis = input / faktor; 
+	}else {
+		// negativer bereich
+		printf("negativ\n");		
+		ergebnis = (65536 - input)/-faktor;
+	}		
 
 
-	fread(buffer, 3, 1, file);
 
+	printf("ergebnis: %f\n", ergebnis);
 
-	printf("gelesen: >%s<\n", buffer);
-	
 	fclose(file);
 
 	return(0);
