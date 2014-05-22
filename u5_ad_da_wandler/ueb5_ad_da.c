@@ -2,6 +2,8 @@
 #include <linux/cdev.h>
 #include <linux/uaccess.h>
 #include <linux/pci.h>
+#include <linux/interrupt.h>
+#include <linux/sched.h>
 
 
 MODULE_AUTHOR("Manuel Mauky");
@@ -54,8 +56,18 @@ static unsigned long ioport=0L, iolen=0L, memstart=0L, memlen=0L;
 
 static char *pt;
 
+static int irqcounter = 0;
+
+static irqreturn_t isr_thread(int irq, void *dev_id){
+	printk("ISR Tread methode: %d\n", irq);
+
+	irqcounter++;
+	return IRQ_HANDLED;
+}
+
+
 static int __devinit device_init(struct pci_dev *pdev, const struct pci_device_id *id){
-	
+	int ret;
 
 	printk("MYPCI device_init\n");
 	
@@ -86,6 +98,18 @@ static int __devinit device_init(struct pci_dev *pdev, const struct pci_device_i
 	// AD-Trigger-Mode: Interne Quelle, Software Trigger 0x0A
 	outb(1, ioport + REGISTER_TRIGGER_MODE_CONTROL);
 
+	
+	// half full
+	outb(0, ioport + REGISTER_INTERRUPT_CONTROL);
+	
+	ret = request_irq(pdev->irq, isr_thread, IRQF_SHARED, pdev->dev.kobj.name, &driver_object);
+	if(ret){
+		printk("Fehler IRQ request\n");
+	}else{
+		printk("IRQ request erfolgreich %d\n", ret);
+	}
+
+	printk("irqcount: %i\n", irqcounter);
 	printk("MYPCI - Device init erfolgreich\n");
 
 	return 0;
@@ -101,10 +125,11 @@ static void device_deinit(struct pci_dev *dev){
 	if(memstart) {
 		release_mem_region(memstart, memlen);
 	}
+
+	free_irq(dev->irq, &driver_object);
 		
 	return;
 }
-
 
 
 static struct pci_driver pci_driver = {
@@ -133,7 +158,7 @@ static ssize_t read(struct file *filePointer, char *buff, size_t count, loff_t *
 	status = inb(ioport + 0x08);
 
 	if((status & 0x10) != 0) {
-		printk("fifo not empty");
+		printk("fifo not empty\n");
 		
 		while((inb(ioport + 0x08) & 0x10) != 0){
 			if(timeout == 100)
@@ -167,6 +192,7 @@ static ssize_t read(struct file *filePointer, char *buff, size_t count, loff_t *
 	input= inw(ioport);
 	
 	printk("Input gelesen: %i \n", input);
+	printk("irqcount: %i\n", irqcounter);
 
 	if(copy_to_user(buff, &input, sizeof(input)) != 0){
 		printk("write error");
