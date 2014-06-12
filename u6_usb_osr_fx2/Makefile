@@ -17,14 +17,11 @@ endif
 # Läd das Treibermodul und erzeugt eine Device-Datei
 devices: removeDevices
 	insmod $(DRIVER_NAME).ko
-	mknod /dev/$(DRIVER_NAME) c 240 0
-	chmod a+rw /dev/$(DRIVER_NAME)
 
 #Muss als su ausgeführt werden
 # Entfernt das Treibermodul und löscht die Device-Datei
 # durch || true wird verhindert, dass das Make-script abbricht, wenn das modul bereits entfernt wurde
 removeDevices:
-	rm -f /dev/$(DRIVER_NAME)
 	rmmod $(DRIVER_NAME) || true	
 
 # Löscht alle unnötigen Build-Artefakte

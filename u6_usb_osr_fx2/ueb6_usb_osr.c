@@ -19,6 +19,7 @@
 #include <linux/poll.h>
 #include <asm/uaccess.h>
 #include <linux/usb.h>
+#include <linux/smp_lock.h>
 
 /*****************************************************************************/
 /* Define the vendor id and product id.                                      */
@@ -1118,9 +1119,17 @@ static int osrfx2_probe(struct usb_interface * interface,
 
     usb_set_intfdata(interface, fx2dev);
 
-    device_create_file(&interface->dev, &dev_attr_switches);
-    device_create_file(&interface->dev, &dev_attr_bargraph);
-    device_create_file(&interface->dev, &dev_attr_7segment);
+    retval = device_create_file(&interface->dev, &dev_attr_switches);
+    if (retval != 0) 
+        goto error;
+	
+    retval = device_create_file(&interface->dev, &dev_attr_bargraph);
+    if (retval != 0) 
+        goto error;
+
+    retval = device_create_file(&interface->dev, &dev_attr_7segment);
+    if (retval != 0) 
+        goto error;
 
     retval = find_endpoints( fx2dev );
     if (retval != 0) 
