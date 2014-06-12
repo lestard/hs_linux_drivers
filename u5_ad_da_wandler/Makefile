@@ -2,7 +2,6 @@
 # Name des Treibers
 DRIVER_NAME = ueb5_ad_da
 
-
 ifneq ($(KERNELRELEASE),)
 
 obj-m := $(DRIVER_NAME).o

@@ -88,6 +88,8 @@ static int __devinit device_init(struct pci_dev *pdev, const struct pci_device_i
 
 	pt = (char*) memstart ;
 
+
+	
 	
 	// Auswahl des Kanals fuer den Multiplexer 0x06
 	outb(0, ioport + REGISTER_AD_CHANNEL_CONTROL);	
@@ -95,12 +97,25 @@ static int __devinit device_init(struct pci_dev *pdev, const struct pci_device_i
 	// Bereich -10 v ... +10 v waehlen  0x08
 	outb(AD_B_10_V, ioport + REGISTER_INPUT_SIGNAL_RANGE);
 
+
+
+
+
+	// plx9050
+	outb(27, ioport + 0x4c);
+
+
 	// AD-Trigger-Mode: Interne Quelle, Software Trigger 0x0A
-	outb(1, ioport + REGISTER_TRIGGER_MODE_CONTROL);
+	outb(0, ioport + REGISTER_TRIGGER_MODE_CONTROL);
 
 	
-	// half full
-	outb(0, ioport + REGISTER_INTERRUPT_CONTROL);
+	
+
+	// half full 0x0C
+	outb(1, ioport + REGISTER_INTERRUPT_CONTROL);
+
+	//clear IRQ
+	//outb(1, ioport + 0x48);
 	
 	ret = request_irq(pdev->irq, isr_thread, IRQF_SHARED, pdev->dev.kobj.name, &driver_object);
 	if(ret){
@@ -109,7 +124,6 @@ static int __devinit device_init(struct pci_dev *pdev, const struct pci_device_i
 		printk("IRQ request erfolgreich %d\n", ret);
 	}
 
-	printk("irqcount: %i\n", irqcounter);
 	printk("MYPCI - Device init erfolgreich\n");
 
 	return 0;
@@ -155,6 +169,7 @@ static ssize_t read(struct file *filePointer, char *buff, size_t count, loff_t *
 	printk("MYPCI - Read\n");
 
 		
+
 	status = inb(ioport + 0x08);
 
 	if((status & 0x10) != 0) {
@@ -168,10 +183,27 @@ static ssize_t read(struct file *filePointer, char *buff, size_t count, loff_t *
 			inw(ioport);
 		}
 	}
+/*
+	// reset FIFO
+	outb(0, ioport + REGISTER_INTERRUPT_CONTROL);
+	outb(4, ioport + REGISTER_INTERRUPT_CONTROL);
+	outb(0, ioport + REGISTER_INTERRUPT_CONTROL);
 
-	
+*/
+
+	outb(0, ioport + REGISTER_TRIGGER_MODE_CONTROL);
+
 	// 0x0E
 	outb(1, ioport + REGISTER_SOFTWARE_TRIGGER);
+
+
+	outb(2, ioport + REGISTER_TRIGGER_MODE_CONTROL);
+
+
+	outb(83, ioport + 0x4c);
+
+	//clear IRQ
+	outb(1, ioport + 0x48);
 	
 	i = 0;
 	
