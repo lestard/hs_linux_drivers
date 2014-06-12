@@ -37,29 +37,20 @@
 /*****************************************************************************/
 /* Die Kommandos, die das OSR-FX2 unterstützt.								 */
 /*****************************************************************************/
-#define OSRFX2_READ_7SEGMENT_DISPLAY      0xD4
 #define OSRFX2_READ_SWITCHES              0xD6
 #define OSRFX2_READ_BARGRAPH_DISPLAY      0xD7
 #define OSRFX2_SET_BARGRAPH_DISPLAY       0xD8
 #define OSRFX2_IS_HIGH_SPEED              0xD9
 #define OSRFX2_REENUMERATE                0xDA
-#define OSRFX2_SET_7SEGMENT_DISPLAY       0xDB
               
 /*****************************************************************************/
-/* BARGRAPH_STATE ist eine Bit-Struktur die dem LED-Balken auf dem
-/* OSR FX2 Board entspricht. Es repräsentiert also den Zustand der
-/* LEDs.
+/* BARGRAPH_STATE ist eine Bit-Struktur die dem LED-Balken auf dem			*/
+/* OSR FX2 Board entspricht. Es repräsentiert also den Zustand der LEDs		*/
 /*****************************************************************************/
 struct bargraph_state {
     union {
         struct {
             /*
-             * Individual bars (LEDs) starting from the top of the display.
-             *
-             * NOTE: The display has 10 LEDs, but the top two LEDs are not
-             *       connected (don't light) and are not included here. 
-             */
-			/*
 			* Die einzelnen LEDs beginnend mit der obersten LED auf der Platine.
 			* Der LED-Balken besitzt 10 LEDs, jedoch sind die beiden obersten 
 			* nicht angeschlossen. Sie können daher nicht zum leuchten gebracht
@@ -75,36 +66,9 @@ struct bargraph_state {
             unsigned char Bar3 : 1;
         };
         /*
-         *  The state of all eight bars as a single octet.
+         *  Der Zustand aller 8 LEDs in einem Char kodiert.
          */
         unsigned char BarsOctet;
-    };
-} __attribute__ ((packed));
-
-/*****************************************************************************/
-/* SEGMENT_STATE is a bit field structure with each bit corresponding        */
-/* to one on the segments on the 7-segment display of the OSR USB FX2        */
-/* Learner Kit development board.                                            */
-/*****************************************************************************/
-struct segment_state {
-    union {
-        struct {
-            /*
-             * Individual segments.
-             */
-            unsigned char Segment_top         : 1;   /* 0x01 */
-            unsigned char Segment_upper_right : 1;   /* 0x02 */
-            unsigned char Segment_lower_right : 1;   /* 0x04 */
-            unsigned char Segment_dot         : 1;   /* 0x08 */
-            unsigned char Segment_lower_left  : 1;   /* 0x10 */
-            unsigned char Segment_middle      : 1;   /* 0x20 */
-            unsigned char Segment_upper_left  : 1;   /* 0x40 */
-            unsigned char Segment_bottom      : 1;   /* 0x80 */
-        };
-        /*
-         *  The state of all the segments as a single octet.
-         */
-        unsigned char SegmentsOctet;
     };
 } __attribute__ ((packed));
 
@@ -453,139 +417,6 @@ static ssize_t set_bargraph(struct device * dev,
 static DEVICE_ATTR( bargraph, S_IRUGO | S_IWUGO, show_bargraph, set_bargraph );
 
 
-/*****************************************************************************/
-/* This routine will show the 7-segment display value.                       */
-/*                                                                           */
-/* The 7-segment display raw value is read and then looked-up in the         */
-/* mapping table, digit_to_segments.                                         */
-/* Any raw display value which is not mapped will be displayed as a ".".     */
-/* There are other special cases handles as well, e.g "H" for high-speed.    */
-/*                                                                           */
-/* Note the two different function defintions depending on kernel version.   */
-/*****************************************************************************/
-static ssize_t show_7segment(struct device * dev, 
-                             struct device_attribute * attr, 
-                             char * buf)
-{
-    struct usb_interface  * intf   = to_usb_interface(dev);
-    struct osrfx2         * fx2dev = usb_get_intfdata(intf);
-    struct segment_state  * packet;
-    int retval;
-    int i;
-
-
-    if (fx2dev->suspended == TRUE) {
-        return sprintf(buf, "S ");   /* device is suspended */
-    }
-
-    packet = kmalloc(sizeof(*packet), GFP_KERNEL);
-    if (!packet) {
-        return -ENOMEM;
-    }
-    packet->SegmentsOctet = nondisplayable;
-
-    retval = usb_control_msg(fx2dev->udev, 
-                             usb_rcvctrlpipe(fx2dev->udev, 0), 
-                             OSRFX2_READ_7SEGMENT_DISPLAY, 
-                             USB_DIR_IN | USB_TYPE_VENDOR,
-                             0,
-                             0,
-                             packet, 
-                             sizeof(*packet),
-                             USB_CTRL_GET_TIMEOUT);
-    if (retval < 0) {
-        dev_err(&fx2dev->udev->dev, "%s - retval=%d\n", 
-                __FUNCTION__, retval);
-        kfree(packet);
-        return retval;
-    }
-
-    for (i=0; i < sizeof(digit_to_segments); i++) {
-        if (packet->SegmentsOctet == digit_to_segments[i]) {
-            break;
-        }
-    }
-
-    if (i < sizeof(digit_to_segments)) {
-        retval = sprintf(buf, "%d ", i );
-    }
-    else {
-        /* Check for special cases */
-        retval = sprintf(buf, "%s ", 
-                         (packet->SegmentsOctet == nondisplayable) ? "." : 
-                         (packet->SegmentsOctet == high_speed)     ? "H" : 
-                         (packet->SegmentsOctet == power_active)   ? "A" : 
-                         "?" );
-    }
-
-    kfree(packet);
-
-    return retval;
-}
-
-/*****************************************************************************/
-/* This routine will set the 7-segment display.                              */
-/*                                                                           */
-/* The input string (buf) is expected to be a numeric character between 0-9. */
-/* Any ohter string values will be displayed on the 7-segment display by     */
-/* turning on the "dot" segment, thus indicating a "nondisplayable" value.   */
-/*                                                                           */
-/* Note the two different function defintions depending on kernel version.   */
-/*****************************************************************************/
-static ssize_t set_7segment(struct device * dev, 
-                            struct device_attribute * attr, 
-                            const char * buf,
-                            size_t count)
-{
-    struct usb_interface  * intf   = to_usb_interface(dev);
-    struct osrfx2         * fx2dev = usb_get_intfdata(intf);
-    struct segment_state  * packet;
-
-    unsigned int value;
-    int retval;
-    char * end;
-
-    packet = kmalloc(sizeof(*packet), GFP_KERNEL);
-    if (!packet) {
-        return -ENOMEM;
-    }
-    packet->SegmentsOctet = 0;
-
-    value = (simple_strtoul(buf, &end, 10) & 0xFF);
-    if (buf == end) {
-        value = nondisplayable;
-    }
-
-    packet->SegmentsOctet = (value < 10) ? 
-        digit_to_segments[value] : nondisplayable;
-
-    retval = usb_control_msg(fx2dev->udev, 
-                             usb_sndctrlpipe(fx2dev->udev, 0), 
-                             OSRFX2_SET_7SEGMENT_DISPLAY, 
-                             USB_DIR_OUT | USB_TYPE_VENDOR,
-                             0,
-                             0,
-                             packet, 
-                             sizeof(*packet),
-                             USB_CTRL_GET_TIMEOUT);
-    if (retval < 0) {
-        dev_err(&fx2dev->udev->dev, "%s - retval=%d\n", 
-                __FUNCTION__, retval);
-    }
-    
-    kfree(packet);
-
-    return count;
-}
-
-/*****************************************************************************/
-/* This macro creates an attribute under the sysfs directory                 */
-/*   ---  /sys/bus/usb/devices/<root_hub>-<hub>:1.0/7segment                 */
-/*                                                                           */
-/* The DEVICE_ATTR() will create "dev_attr_7segment".                        */
-/* "dev_attr_7segment" is referenced in both probe and disconnect routines.  */
-/*****************************************************************************/
-static DEVICE_ATTR( 7segment, S_IRUGO | S_IWUGO, show_7segment, set_7segment );
 
 /*****************************************************************************/
 /* Whenever one of the DIP switches is toggled, an interrupt packet will     */
@@ -1133,11 +964,6 @@ static int osrfx2_probe(struct usb_interface * interface,
     if (retval != 0) 
         goto error;
 
-    retval = device_create_file(&interface->dev, &dev_attr_7segment);
-    if (retval != 0) 
-        goto error;
-
-
     retval = find_endpoints( fx2dev );
     if (retval != 0) 
         goto error;
@@ -1184,7 +1010,6 @@ static void osrfx2_disconnect(struct usb_interface * interface)
 
     device_remove_file(&interface->dev, &dev_attr_switches);
     device_remove_file(&interface->dev, &dev_attr_bargraph);
-    device_remove_file(&interface->dev, &dev_attr_7segment);
 
     usb_deregister_dev(interface, &osrfx2_class);
 
@@ -1276,7 +1101,7 @@ static struct usb_driver osrfx2_driver = {
 };
 
 /*****************************************************************************/
-/* This driver's commission routine: just register with USB subsystem.       */
+/* Die init methode des Treibers registriert den Treiber beim USB subsystem  */
 /*****************************************************************************/
 static int __init osrfx2_init(void)
 {
@@ -1288,7 +1113,7 @@ static int __init osrfx2_init(void)
 }
 
 /*****************************************************************************/
-/* This driver's decommission routine: just deregister with USB subsystem.   */
+/* Die exit methode des Treibers deregistriert den Treiber vom USB subsystem */
 /*****************************************************************************/
 static void __exit osrfx2_exit(void)
 {
@@ -1296,7 +1121,8 @@ static void __exit osrfx2_exit(void)
 }
 
 /*****************************************************************************/
-/* Advertise this driver's init and exit routines                            */
+/* Die Init und exit methoden des Treibers müssen dem System bekannt gemacht */
+/* werden.		                         										 */
 /*****************************************************************************/
 module_init( osrfx2_init );
 module_exit( osrfx2_exit );
