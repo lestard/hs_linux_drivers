@@ -22,7 +22,7 @@
 #include <linux/smp_lock.h>
 
 /*****************************************************************************/
-/* Define the vendor id and product id.                                      */
+/* Die Vendor und Produkt-ID                                                 */
 /*****************************************************************************/
 #define VENDOR_ID   0x0547       
 #define PRODUCT_ID  0x1002
@@ -35,7 +35,7 @@
 #define FALSE (0)
 
 /*****************************************************************************/
-/* Define the vendor commands supported by OSR USB FX2 device.               */
+/* Die Kommandos, die das OSR-FX2 unterstützt.								 */
 /*****************************************************************************/
 #define OSRFX2_READ_7SEGMENT_DISPLAY      0xD4
 #define OSRFX2_READ_SWITCHES              0xD6
@@ -46,9 +46,9 @@
 #define OSRFX2_SET_7SEGMENT_DISPLAY       0xDB
               
 /*****************************************************************************/
-/* BARGRAPH_STATE is a bit field structure with each bit corresponding       */
-/* to one on the bars on the bargraph LED of the OSR USB FX2 Learner Kit     */
-/* development board.                                                        */
+/* BARGRAPH_STATE ist eine Bit-Struktur die dem LED-Balken auf dem
+/* OSR FX2 Board entspricht. Es repräsentiert also den Zustand der
+/* LEDs.
 /*****************************************************************************/
 struct bargraph_state {
     union {
@@ -59,6 +59,12 @@ struct bargraph_state {
              * NOTE: The display has 10 LEDs, but the top two LEDs are not
              *       connected (don't light) and are not included here. 
              */
+			/*
+			* Die einzelnen LEDs beginnend mit der obersten LED auf der Platine.
+			* Der LED-Balken besitzt 10 LEDs, jedoch sind die beiden obersten 
+			* nicht angeschlossen. Sie können daher nicht zum leuchten gebracht
+			* werden und sind deshalb auch hier nicht aufgeführt. 
+			*/
             unsigned char Bar4 : 1;
             unsigned char Bar5 : 1;
             unsigned char Bar6 : 1;
@@ -1130,6 +1136,7 @@ static int osrfx2_probe(struct usb_interface * interface,
     retval = device_create_file(&interface->dev, &dev_attr_7segment);
     if (retval != 0) 
         goto error;
+
 
     retval = find_endpoints( fx2dev );
     if (retval != 0) 
