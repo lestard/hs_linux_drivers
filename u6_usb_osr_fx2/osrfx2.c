@@ -994,7 +994,7 @@ error:
 }
 
 /*****************************************************************************/
-/* Event: device instance is being disconnected (deleted)                    */
+/* Event-Handler: Das Gerät wurde entfernt.									 */
 /*****************************************************************************/
 static void osrfx2_disconnect(struct usb_interface * interface)
 {
@@ -1021,7 +1021,7 @@ static void osrfx2_disconnect(struct usb_interface * interface)
 }
 
 /*****************************************************************************/
-/* Event: device is being suspended.                                         */
+/* Event-Handler: Das Gerät hat sich in den Ruhe-Modus geschalten.           */
 /*****************************************************************************/
 static int osrfx2_suspend(struct usb_interface * intf, pm_message_t message)
 {
@@ -1046,7 +1046,7 @@ static int osrfx2_suspend(struct usb_interface * intf, pm_message_t message)
 }
 
 /*****************************************************************************/
-/* Event: device is being resumed                                            */
+/* Event-Handler: Das Gerät ist aus dem Ruhe-Modus zurück gekehrt.           */
 /*****************************************************************************/
 static int osrfx2_resume(struct usb_interface * intf)
 {
@@ -1089,7 +1089,9 @@ static int osrfx2_resume(struct usb_interface * intf)
 }
 
 /*****************************************************************************/
-/* This driver's usb_driver structure: ref-ed by osrfx2_init and osrfx2_exit */
+/* Die Treiber-Struktur des USB Treibers mit den Referenzen auf				*/
+/* die entsprechenden methoden. Dieses Struct wird zum initialisieren		*/
+/* und deinitialisieren benötigt.											*/
 /*****************************************************************************/
 static struct usb_driver osrfx2_driver = {
     .name        = "osrfx2",
