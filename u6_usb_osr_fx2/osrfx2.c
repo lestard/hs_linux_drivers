@@ -128,7 +128,7 @@ static struct usb_device_id id_table [] = {
 MODULE_DEVICE_TABLE(usb, id_table);
 
 /*****************************************************************************/
-/* This is the private device context structure.                             */
+/* Hiermit wird die interne Struktur und der Zustand des Geräts abgebildet.  */
 /*****************************************************************************/
 struct osrfx2 {
 
@@ -470,7 +470,7 @@ static void interrupt_handler(struct urb * urb)
 }
 
 /*****************************************************************************/
-/* This routine will ready operations for receiving interrupts from the      */
+/* TODO This routine will ready operations for receiving interrupts from the      */
 /* OSR USB-FX2 device.                                                       */
 /*****************************************************************************/
 static int init_interrupts(struct osrfx2 * fx2dev)
@@ -511,7 +511,7 @@ static int init_interrupts(struct osrfx2 * fx2dev)
 }
 
 /*****************************************************************************/
-/*                                                                           */
+/*          TODO                                                                 */
 /*****************************************************************************/
 static int init_bulks(struct osrfx2 * fx2dev)
 {
@@ -531,7 +531,7 @@ static int init_bulks(struct osrfx2 * fx2dev)
 }
 
 /*****************************************************************************/
-/* This routine will attempt to locate the required endpoints and            */
+/* TODO This routine will attempt to locate the required endpoints and            */
 /* retain relevant information in the osrfx2 structure instance.             */
 /*****************************************************************************/
 static int find_endpoints(struct osrfx2 * fx2dev)
@@ -579,7 +579,7 @@ static int find_endpoints(struct osrfx2 * fx2dev)
 }
 
 /*****************************************************************************/
-/*                                                                           */
+/* TODO                                                                          */
 /*****************************************************************************/
 static void osrfx2_delete(struct kref * kref)
 {
@@ -604,7 +604,8 @@ static void osrfx2_delete(struct kref * kref)
 }
 
 /*****************************************************************************/
-/* osrfx2_open                                                               */
+/* TODO
+osrfx2_open                                                               */
 /*                                                                           */
 /* Note:                                                                     */
 /*   The serialization method used below has a side-effect which I don't     */
@@ -693,7 +694,7 @@ static int osrfx2_open(struct inode * inode, struct file * file)
 }
 
 /*****************************************************************************/
-/*                                                                           */
+/*          TODO                                                                 */
 /*****************************************************************************/
 static int osrfx2_release(struct inode * inode, struct file * file)
 {
@@ -724,7 +725,7 @@ static int osrfx2_release(struct inode * inode, struct file * file)
 }
 
 /*****************************************************************************/
-/*                                                                           */
+/*     TODO                                                                      */
 /*****************************************************************************/
 static ssize_t osrfx2_read(struct file * file, char * buffer, 
                            size_t count, loff_t * ppos)
@@ -769,7 +770,7 @@ static ssize_t osrfx2_read(struct file * file, char * buffer,
 }
 
 /*****************************************************************************/
-/*                                                                           */
+/*               TODO                                                            */
 /*****************************************************************************/
 static void write_bulk_backend(struct urb * urb)
 {
@@ -797,7 +798,7 @@ static void write_bulk_backend(struct urb * urb)
 }
 
 /*****************************************************************************/
-/*                                                                           */
+/*     TODO                                                                      */
 /*****************************************************************************/
 static ssize_t osrfx2_write(struct file * file, const char * user_buffer, 
                             size_t count, loff_t * ppos)
@@ -881,7 +882,7 @@ error:
 }
 
 /*****************************************************************************/
-/*                                                                           */
+/* TODO                                                                          */
 /*****************************************************************************/
 static unsigned int osrfx2_poll(struct file * file, poll_table * wait)
 {
@@ -908,7 +909,7 @@ static unsigned int osrfx2_poll(struct file * file, poll_table * wait)
 }
 
 /*****************************************************************************/
-/* This fills-in the driver-supported file_operations fields.                */
+/* Die File-Operationen, die von diesem Treiber unterstützt werden. 		*/
 /*****************************************************************************/
 static struct file_operations osrfx2_file_ops = {
     .owner   = THIS_MODULE,
@@ -920,8 +921,9 @@ static struct file_operations osrfx2_file_ops = {
 };
  
 /*****************************************************************************/
-/* Usb class driver info in order to get a minor number from the usb core,   */
-/* and to have the device registered with devfs and the driver core.         */
+/* Klasse zur identifikation des USB Treibers. Es werden die unterstützten	*/
+/* File-Operationen, der Geräte-Name und die Minor-Nummer vom USB core 		*/
+/* angegeben.																*/
 /*****************************************************************************/
 static struct usb_class_driver osrfx2_class = {
     .name       = "device/osrfx2_%d",
@@ -930,7 +932,8 @@ static struct usb_class_driver osrfx2_class = {
 };
 
 /*****************************************************************************/
-/* Event: un-bound device instance is querying for suitable owner driver.    */
+/* Event: Prüfung ob das Gerät bestimmte Funktionen unterstüzt und von		*/
+/* diesem Treiber bedient werden kann.										*/
 /*****************************************************************************/
 static int osrfx2_probe(struct usb_interface * interface, 
                         const struct usb_device_id * id)
@@ -1095,7 +1098,7 @@ static int osrfx2_resume(struct usb_interface * intf)
 /*****************************************************************************/
 static struct usb_driver osrfx2_driver = {
     .name        = "osrfx2",
-    .probe       = osrfx2_probe,
+    .probe       = osrfx2_probe, //enter
     .disconnect  = osrfx2_disconnect,
     .suspend     = osrfx2_suspend,
     .resume      = osrfx2_resume,
@@ -1103,7 +1106,7 @@ static struct usb_driver osrfx2_driver = {
 };
 
 /*****************************************************************************/
-/* Die init methode des Treibers registriert den Treiber beim USB subsystem  */
+/* Die init methode registriert den Treiber beim USB subsystem  			*/
 /*****************************************************************************/
 static int __init osrfx2_init(void)
 {
@@ -1115,7 +1118,7 @@ static int __init osrfx2_init(void)
 }
 
 /*****************************************************************************/
-/* Die exit methode des Treibers deregistriert den Treiber vom USB subsystem */
+/* Die exit methode deregistriert den Treiber vom USB subsystem 			*/
 /*****************************************************************************/
 static void __exit osrfx2_exit(void)
 {
@@ -1124,7 +1127,7 @@ static void __exit osrfx2_exit(void)
 
 /*****************************************************************************/
 /* Die Init und exit methoden des Treibers müssen dem System bekannt gemacht */
-/* werden.		                         										 */
+/* werden.		                         									 */
 /*****************************************************************************/
 module_init( osrfx2_init );
 module_exit( osrfx2_exit );
