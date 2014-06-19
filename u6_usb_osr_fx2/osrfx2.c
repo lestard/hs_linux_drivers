@@ -91,9 +91,7 @@ static const unsigned char power_active   = 0x77;   /* PM active "A" */
 static const unsigned char power_suspend  = 0xE5;   /* PM suspend "S" */
 
 /*****************************************************************************/
-/* SWITCHES_STATE is a bit field structure with each bit corresponding       */
-/* to one of the DIP switches on the OSR USB FX2 Learner Kit development     */
-/* board.                                                                    */
+/* Diese Struktur kapselt den Zustand der Schalter-Leiste. 					*/
 /*****************************************************************************/
 struct switches_state {
     union {
@@ -118,7 +116,7 @@ struct switches_state {
 } __attribute__ ((packed));
 
 /*****************************************************************************/
-/* Table of devices that work with this driver                               */
+/* ID-Tabelle mit Geräte-IDs die mit diesem Treiber funktionieren            */
 /*****************************************************************************/
 static struct usb_device_id id_table [] = {
     { USB_DEVICE( VENDOR_ID, PRODUCT_ID ) },
@@ -135,20 +133,20 @@ struct osrfx2 {
     struct usb_device    * udev;
     struct usb_interface * interface;
     
-    /*
-     * This queue is used by the poll and irq methods
-     */
+	/*
+	 * Queue die zum Polling und für IRQ methoden benutzt wird.
+	 */ 
     wait_queue_head_t FieldEventQueue;
     
     /*
-     *  Transfer Buffers
+     *  Buffers für den Transfer von Daten
      */
     unsigned char * int_in_buffer;
     unsigned char * bulk_in_buffer;
     unsigned char * bulk_out_buffer;
     
     /*
-     *  Buffer sizes
+     *  Die Größen der einzelnen Buffer
      */
     size_t int_in_size;
     size_t bulk_in_size;
@@ -162,39 +160,39 @@ struct osrfx2 {
     __u8  bulk_out_endpointAddr;
     
     /*
-     *  Endpoint intervals
+     *  Intervalle für die Endpunkte
      */
     __u8  int_in_endpointInterval;
     __u8  bulk_in_endpointInterval;
     __u8  bulk_out_endpointInterval;
     
     /*
-     *  URBs
+     *  USB Request Blocks (URBs)
      */
     struct urb * bulk_in_urb;
     struct urb * int_in_urb;
     struct urb * bulk_out_urb;
     
     /*
-     *  Refrence counter
+     *  Referenz-Zähler
      */
     struct kref      kref;
     struct semaphore sem;
 
     /*
-     *  Data from interrupt is retained here.
+     *  Hier werden die Daten des Interrupts festgehalten.
      */
     struct switches_state  switches;
 
     unsigned char notify;
 
     /*
-     *  Track usage of the bulk pipes: serialize each pipe's use.
+     *  TODO Track usage of the bulk pipes: serialize each pipe's use.
      */
     atomic_t bulk_write_available;
     atomic_t bulk_read_available;
 
-    /*
+    /*	TODO
      *  Data tracking for Read/Write. 
      *  Writes will add to the pending_data count and 
      *  reads will deplete the pending_data count.
@@ -210,19 +208,20 @@ struct osrfx2 {
     size_t  pending_data;
 
     /*
-     *  Power Managment related fields
+     *  Power Management: Gibt an ob sich das Gerät gerade im Ruhemodus befindet
      */
     int   suspended;        /* boolean */
 
 };
  
 /*****************************************************************************/
-/* Forward declaration for our usb_driver definition later.                  */
+/* Die Treiber-Struktur wird hier schon angelegt um sie im folgenden Code	 */
+/* benutzt werden kann. Die tatsächliche Wertzuweisung erfolgt weiter unten. */
 /*****************************************************************************/
 static struct usb_driver osrfx2_driver;
 
 /*****************************************************************************/
-/* This is interrupt packet stucture                                         */
+/* Hier wird die Struktur für Interrupts der Schalter-Leiste definiert.      */
 /*****************************************************************************/
 struct interrupt_packet {
 
@@ -231,8 +230,8 @@ struct interrupt_packet {
 } __attribute__ ((packed));
 
 /*****************************************************************************/
-/* This routine will retrieve the switches state, format it and return a     */
-/* representative string.                                                    */
+/* Mit dieser Methode wird der Zustand der Schalter-Leiste abgefragt und 	 */
+/* als formatierter String (return param buf) zurück gegeben.                */
 /*                                                                           */
 /* Note the two different function defintions depending on kernel version.   */
 /*****************************************************************************/
@@ -251,6 +250,7 @@ static ssize_t show_switches(struct device * dev,
     }
     packet->SwitchesOctet = 0;
 
+	// Hier wird der Zustand der Schalter vom Gerät abgefragt
     retval = usb_control_msg(fx2dev->udev, 
                              usb_rcvctrlpipe(fx2dev->udev, 0), 
                              OSRFX2_READ_SWITCHES, 
@@ -267,6 +267,7 @@ static ssize_t show_switches(struct device * dev,
         return retval;
     }
 
+	// Formatiertes Schreiben der Schalter-Zustände in den buf-Ausgabe-String
     retval = sprintf(buf, "%s%s%s%s%s%s%s%s",    /* left sw --> right sw */
                      (packet->Switch1) ? "*" : ".",
                      (packet->Switch2) ? "*" : ".",
@@ -283,24 +284,30 @@ static ssize_t show_switches(struct device * dev,
 }
 
 /*****************************************************************************/
-/* This macro creates an attribute under the sysfs directory                 */
-/*   ---  /sys/bus/usb/devices/<root_hub>-<hub>:1.0/switches                 */
-/*                                                                           */
-/* The DEVICE_ATTR() will create "dev_attr_switches" .                       */
-/* "dev_attr_switches" is referenced in both probe and disconnect routines.  */
-/*                                                                           */
-/* Note that there is no "set" function for this attribute; therefore the    */
-/* S_IWUGO (write) flag is not included and the "set" routine point is set   */
-/* to NULL.                                                                  */
+/* Das Macro "DEVICE_ATTR" kommt aus dem sysfs.								 */
+/* Es wird benutzt um Geräte-Attribute anzulegen.							 */
+/* 																			 */
+/* Der erste Parameter ist der Name des Attributs. Anschließend werden die 	 */
+/* Zugriffsmodi definiert. Hier können Werte aus linux/stat.h benutzt werden.*/ 
+/* In unserem Fall 'S_IRUGO' für Read+User+Group+Others.					 */
+/* Die letzten beiden Parameter sind Methoden-Referenzen für 				 */
+/* "show" und "store", also zum Lesen und Schreiben des Attributs.			 */
+/* 																			 */
+/* Da wir hier an dieser Stelle nur den Zustand der Schalter lesen wollen,	 */
+/* ist der letzte Parameter für die Store-methode NULL.						 */
+/* 																			 */
+/* Das Macro legt das Attribut im sysfs Verzeichnis an unter:				 */
+/* --- /sys/bus/usb/devices/<root_hub>-<hub>:1.0/switches					 */
+/* 																			 */
+/* Das Attribut bekommt den namen "dev_attr_switches" und wird von diesem	 */
+/* Treiber z.B. in der Probe und Disconnect Methode benutzt.				 */
 /*****************************************************************************/
 static DEVICE_ATTR( switches, S_IRUGO, show_switches, NULL );
 
 
 /*****************************************************************************/
-/* This routine will retrieve the bargraph LED state, format it and return a */
-/* representative string.                                                    */
-/*                                                                           */
-/* Note the two different function defintions depending on kernel version.   */
+/* Diese Methode liest den Zustand der Bargraph LED-Leiste ein. Dieser wird  */
+/* als formatierter String zurück gegeben.									 */
 /*****************************************************************************/
 static ssize_t show_bargraph(struct device * dev, 
                              struct device_attribute * attr, 
@@ -316,7 +323,8 @@ static ssize_t show_bargraph(struct device * dev,
         return -ENOMEM;
     }
     packet->BarsOctet = 0;
-
+	
+	// Einlesen des Zustands der LED-Leiste vom Gerät
     retval = usb_control_msg(fx2dev->udev, 
                              usb_rcvctrlpipe(fx2dev->udev, 0), 
                              OSRFX2_READ_BARGRAPH_DISPLAY, 
@@ -333,7 +341,8 @@ static ssize_t show_bargraph(struct device * dev,
         kfree(packet);
         return retval;
     }
-
+	
+	// Formatiertes Schreiben in den Ausgabe-Puffer
     retval = sprintf(buf, "%s%s%s%s%s%s%s%s",    /* bottom LED --> top LED */
                      (packet->Bar1) ? "*" : ".",
                      (packet->Bar2) ? "*" : ".",
@@ -350,9 +359,7 @@ static ssize_t show_bargraph(struct device * dev,
 }
 
 /*****************************************************************************/
-/* This routine will set the bargraph LEDs.                                  */
-/*                                                                           */
-/* Note the two different function defintions depending on kernel version.   */
+/* Diese Methode wird zum setzen der Bargraph LED-Leiste benutzt. 			*/
 /*****************************************************************************/
 static ssize_t set_bargraph(struct device * dev, 
                             struct device_attribute * attr, 
@@ -372,12 +379,14 @@ static ssize_t set_bargraph(struct device * dev,
         return -ENOMEM;
     }
     packet->BarsOctet = 0;
-
+	
+	// entgegeben nehmen des zu setzenden Werts aus Eingabe-Puffer "bug"
     value = (simple_strtoul(buf, &end, 10) & 0xFF);
     if (buf == end) {
         value = 0;
     }
 
+	// Übernehmen/Umsetzen des eingelesenen Werts in die Bargraph-Status-Struktur
     packet->Bar1 = (value & 0x01) ? 1 : 0;
     packet->Bar2 = (value & 0x02) ? 1 : 0;
     packet->Bar3 = (value & 0x04) ? 1 : 0;
@@ -387,6 +396,7 @@ static ssize_t set_bargraph(struct device * dev,
     packet->Bar7 = (value & 0x40) ? 1 : 0;
     packet->Bar8 = (value & 0x80) ? 1 : 0;
 
+	// Nun wird die Bargraph-Struktur mit den zu setzenden Werten an das USB-Gerät gesendet
     retval = usb_control_msg(fx2dev->udev, 
                              usb_sndctrlpipe(fx2dev->udev, 0), 
                              OSRFX2_SET_BARGRAPH_DISPLAY, 
@@ -408,19 +418,26 @@ static ssize_t set_bargraph(struct device * dev,
 }
 
 /*****************************************************************************/
-/* This macro creates an attribute under the sysfs directory                 */
+/* Hier wird ein Geräte Attribut zum lesen und setzen der LED-Leiste 		 */ 
+/* im sysfs angelegt, äquivalent zum obigen Aufruf bei "show_switches"       */
 /*   ---  /sys/bus/usb/devices/<root_hub>-<hub>:1.0/bargraph                 */
-/*                                                                           */
-/* The DEVICE_ATTR() will create "dev_attr_bargraph".                        */
-/* "dev_attr_bargraph" is referenced in both probe and disconnect routines.  */
+/*                                                     						 *
+/* Eine besonderheit hier ist, dass diesmal das Attribut nicht nur lesend,	 *
+/* sondern auch schreibend benutzt werden kann. Deshalb wird bei den 		 *
+/* Zugriffs-Modi zusätzlich 'S_IWUGO' (Write+User+Group+Other) und 			 *
+/* als letzter Parameter die Methodenreferenz zu 'set_bargraph' 			 *
+/* als Store-Methode mitgegeben.											 *
+/* 																			 *
+/* Es wird ein Attribut mit namen "dev_attr_bargraph" angelegt.				 *
 /*****************************************************************************/
 static DEVICE_ATTR( bargraph, S_IRUGO | S_IWUGO, show_bargraph, set_bargraph );
 
 
 
 /*****************************************************************************/
-/* Whenever one of the DIP switches is toggled, an interrupt packet will     */
-/* be sent by the device. This routine will catch that packet.               */
+/* Immer wenn ein Schalter am Gerät gedrückt wird, wird ein Interrupt-Paket  */	
+/* gesendet. Diese Methode reagiert auf dieses Interrupt-Paket 				 */
+/* und behandelt es.														 */
 /*****************************************************************************/
 static void interrupt_handler(struct urb * urb)
 {
@@ -428,21 +445,22 @@ static void interrupt_handler(struct urb * urb)
     struct interrupt_packet * packet = urb->transfer_buffer;
     int retval;
 
+	// Im Normal-Fall sollte der Status 0 sein
     if (urb->status == 0) {
 
         /* 
-         *  Retain the updated switches state 
+		 *  Hole zunächst die neuen Schalter-Zustände vom Gerät ab.
          */
         fx2dev->switches.SwitchesOctet = packet->switches.SwitchesOctet;
         fx2dev->notify = TRUE;
         
         /*
-         *  Wake-up any requests enqueued.
+		 * Alle wartenden Requests in der Queue werden aufgeweckt.
          */
         wake_up(&(fx2dev->FieldEventQueue));
 
         /* 
-         *  Restart interrupt urb 
+         *  Der Interrupt URB muss erneut gesetzt werden damit in der Zukunft wieder auf neue Interrupts reagiert werden kann.
          */
         retval = usb_submit_urb(urb, GFP_ATOMIC);
         if (retval != 0) {
@@ -455,8 +473,8 @@ static void interrupt_handler(struct urb * urb)
          */
         return;   
     } 
-
-    /* Reached here due to an error: log some useful information */
+	
+	/* Es gab wohl einen Fehler. Wenn der Return-Code bekannt ist, wird still returnt. Andernfalls wird eine Fehlermeldung ausgegeben.*/
     switch (urb->status) {
         case -ECONNRESET:
         case -ENOENT:
@@ -470,14 +488,18 @@ static void interrupt_handler(struct urb * urb)
 }
 
 /*****************************************************************************/
-/* TODO This routine will ready operations for receiving interrupts from the      */
-/* OSR USB-FX2 device.                                                       */
+/* Diese Methode registriert den Interrupt-Handler beim Gerät damit auf 	 */
+/* Interrupts reagiert werden kann.                                          */
 /*****************************************************************************/
 static int init_interrupts(struct osrfx2 * fx2dev)
 {
     int pipe;
     int retval;
 
+	// Hole die 'pipe' für das Gerät und den Endpunkt.
+	// Eine 'Pipe' ist ein Integer, in den Verschiedene Informationen bitweise kodiert sind, wie: 
+	// "device number", "endpoint number", "current data", "speed" und den Typ (control, interrupt, bulk, isochronous).
+	// Die konkrete Kodierung kann in linux/usb.h angeschaut werden.
     pipe = usb_rcvintpipe(fx2dev->udev, fx2dev->int_in_endpointAddr);
     
     fx2dev->int_in_size = sizeof(struct interrupt_packet);  
@@ -492,14 +514,15 @@ static int init_interrupts(struct osrfx2 * fx2dev)
         return -ENOMEM;
     }
 
-    usb_fill_int_urb( fx2dev->int_in_urb, 
-                      fx2dev->udev,
-                      pipe,
-                      fx2dev->int_in_buffer, 
-                      fx2dev->int_in_size,
-                      interrupt_handler, 
-                      fx2dev,
-                      fx2dev->int_in_endpointInterval );
+	// Initialisieren des Interrupt-URBs
+    usb_fill_int_urb( fx2dev->int_in_urb, 	// ptr auf den zu initialisierenden URB
+                      fx2dev->udev,			// ptr auf das Gerät zu diesem URB
+                      pipe,					// die Endpunkt-Pipe
+                      fx2dev->int_in_buffer, 	// der Transfer-Buffer
+                      fx2dev->int_in_size,		// die Länge des Transfer-Buffers
+                      interrupt_handler, 		// Methoden-Referenz auf den Interrupt-Handler
+                      fx2dev,					// Der Geräte-Kontext, in dem der URB gesetzt wird
+                      fx2dev->int_in_endpointInterval );	// Der Intervall des URBs
 
     retval = usb_submit_urb( fx2dev->int_in_urb, GFP_KERNEL );
     if (retval != 0) {
