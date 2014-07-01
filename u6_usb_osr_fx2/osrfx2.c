@@ -35,17 +35,16 @@
 #define FALSE (0)
 
 /*****************************************************************************/
-/* Die Kommandos, die das OSR-FX2 unterstützt.								 */
+/* Die Kommandos, die das OSR-FX2 unterstützt.                               */
 /*****************************************************************************/
 #define OSRFX2_READ_SWITCHES              0xD6
 #define OSRFX2_READ_BARGRAPH_DISPLAY      0xD7
 #define OSRFX2_SET_BARGRAPH_DISPLAY       0xD8
-#define OSRFX2_IS_HIGH_SPEED              0xD9
 #define OSRFX2_REENUMERATE                0xDA
               
 /*****************************************************************************/
-/* BARGRAPH_STATE ist eine Bit-Struktur die dem LED-Balken auf dem			*/
-/* OSR FX2 Board entspricht. Es repräsentiert also den Zustand der LEDs		*/
+/* BARGRAPH_STATE ist eine Bit-Struktur die dem LED-Balken auf dem           */
+/* OSR FX2 Board entspricht. Es repräsentiert also den Zustand der LEDs      */
 /*****************************************************************************/
 struct bargraph_state {
     union {
@@ -85,13 +84,8 @@ static const unsigned char digit_to_segments [10] = {
     0x67   /* 9 */
 };
 
-static const unsigned char nondisplayable = 0x08;   /* the "dot" segment */
-static const unsigned char high_speed     = 0x76;   /* high-speed "H" */
-static const unsigned char power_active   = 0x77;   /* PM active "A" */
-static const unsigned char power_suspend  = 0xE5;   /* PM suspend "S" */
-
 /*****************************************************************************/
-/* Diese Struktur kapselt den Zustand der Schalter-Leiste. 					*/
+/* Diese Struktur kapselt den Zustand der Schalter-Leiste.                   */
 /*****************************************************************************/
 struct switches_state {
     union {
@@ -187,23 +181,23 @@ struct osrfx2 {
     unsigned char notify;
 
     /*
-     *  TODO Track usage of the bulk pipes: serialize each pipe's use.
+     * Zähler um Bulk-Lese- und Bulk-Schreibzugriffe mitzählen zu können. 
      */
     atomic_t bulk_write_available;
     atomic_t bulk_read_available;
 
-    /*	TODO
-     *  Data tracking for Read/Write. 
-     *  Writes will add to the pending_data count and 
-     *  reads will deplete the pending_data count.
+    /*
+     * Zähler für die geschriebenen und gelesenen Daten.
+     * Bei Lese-Zugriffen wird der Zähler heruntergezählt, 
+     * bei Schreibzugriffen wird heraufgezählt. 
      *
-     *  Note: The OSRFX2 device specs states that the firmware will buffer
-     *        up-to four write packet (two on EP6 and two on EP8).
-     *        The buffers can be drained by issuing reads to EP8.
-     *        The fifth outstanding write packet attempt will cause the write
-     *        to block, waiting for the arrival of a read request to
-     *        effectively free a buffer into which the write data can be 
-     *        held.
+     * Dies wird benutzt, da laut Spec die Firmware des Boards bis zu 4 
+     * Schreib-Pakete puffern kann. 
+     * Beim fünften ankommenden Schreib-Paket wird der Schreib-Zugriff blockiert.
+     * Es wird dann auf eine Lese-Anfrage gewartet um den Puffer wieder zu leeren. 
+     * Erst danach können wieder neue Pakete geschrieben werden.
+     *
+     * Um die Gepufferten Pakete mitzählen zu können wird dieser Zähler benutzt.
      */
     size_t  pending_data;
 
@@ -215,7 +209,7 @@ struct osrfx2 {
 };
  
 /*****************************************************************************/
-/* Die Treiber-Struktur wird hier schon angelegt um sie im folgenden Code	 */
+/* Die Treiber-Struktur wird hier schon angelegt um sie im folgenden Code    */
 /* benutzt werden kann. Die tatsächliche Wertzuweisung erfolgt weiter unten. */
 /*****************************************************************************/
 static struct usb_driver osrfx2_driver;
@@ -230,7 +224,7 @@ struct interrupt_packet {
 } __attribute__ ((packed));
 
 /*****************************************************************************/
-/* Mit dieser Methode wird der Zustand der Schalter-Leiste abgefragt und 	 */
+/* Mit dieser Methode wird der Zustand der Schalter-Leiste abgefragt und     */
 /* als formatierter String (return param buf) zurück gegeben.                */
 /*                                                                           */
 /* Note the two different function defintions depending on kernel version.   */
@@ -284,21 +278,21 @@ static ssize_t show_switches(struct device * dev,
 }
 
 /*****************************************************************************/
-/* Das Macro "DEVICE_ATTR" kommt aus dem sysfs.								 */
-/* Es wird benutzt um Geräte-Attribute anzulegen.							 */
-/* 																			 */
-/* Der erste Parameter ist der Name des Attributs. Anschließend werden die 	 */
+/* Das Macro "DEVICE_ATTR" kommt aus dem sysfs.                              */
+/* Es wird benutzt um Geräte-Attribute anzulegen.                            */
+/*                                                                           */
+/* Der erste Parameter ist der Name des Attributs. Anschließend werden die   */
 /* Zugriffsmodi definiert. Hier können Werte aus linux/stat.h benutzt werden.*/ 
-/* In unserem Fall 'S_IRUGO' für Read+User+Group+Others.					 */
-/* Die letzten beiden Parameter sind Methoden-Referenzen für 				 */
-/* "show" und "store", also zum Lesen und Schreiben des Attributs.			 */
-/* 																			 */
-/* Da wir hier an dieser Stelle nur den Zustand der Schalter lesen wollen,	 */
-/* ist der letzte Parameter für die Store-methode NULL.						 */
-/* 																			 */
-/* Das Macro legt das Attribut im sysfs Verzeichnis an unter:				 */
-/* --- /sys/bus/usb/devices/<root_hub>-<hub>:1.0/switches					 */
-/* 																			 */
+/* In unserem Fall 'S_IRUGO' für Read+User+Group+Others.                     */
+/* Die letzten beiden Parameter sind Methoden-Referenzen für                 */
+/* "show" und "store", also zum Lesen und Schreiben des Attributs.	         */
+/*                                                                           */
+/* Da wir hier an dieser Stelle nur den Zustand der Schalter lesen wollen,   */
+/* ist der letzte Parameter für die Store-methode NULL.                      */
+/* 																	         */
+/* Das Macro legt das Attribut im sysfs Verzeichnis an unter:	             */
+/* --- /sys/bus/usb/devices/<root_hub>-<hub>:1.0/switches	                 */
+/* 															                 */
 /* Das Attribut bekommt den namen "dev_attr_switches" und wird von diesem	 */
 /* Treiber z.B. in der Probe und Disconnect Methode benutzt.				 */
 /*****************************************************************************/
@@ -359,7 +353,7 @@ static ssize_t show_bargraph(struct device * dev,
 }
 
 /*****************************************************************************/
-/* Diese Methode wird zum setzen der Bargraph LED-Leiste benutzt. 			*/
+/* Diese Methode wird zum setzen der Bargraph LED-Leiste benutzt. 			 */
 /*****************************************************************************/
 static ssize_t set_bargraph(struct device * dev, 
                             struct device_attribute * attr, 
@@ -421,14 +415,14 @@ static ssize_t set_bargraph(struct device * dev,
 /* Hier wird ein Geräte Attribut zum lesen und setzen der LED-Leiste 		 */ 
 /* im sysfs angelegt, äquivalent zum obigen Aufruf bei "show_switches"       */
 /*   ---  /sys/bus/usb/devices/<root_hub>-<hub>:1.0/bargraph                 */
-/*                                                     						 *
-/* Eine besonderheit hier ist, dass diesmal das Attribut nicht nur lesend,	 *
-/* sondern auch schreibend benutzt werden kann. Deshalb wird bei den 		 *
-/* Zugriffs-Modi zusätzlich 'S_IWUGO' (Write+User+Group+Other) und 			 *
-/* als letzter Parameter die Methodenreferenz zu 'set_bargraph' 			 *
-/* als Store-Methode mitgegeben.											 *
-/* 																			 *
-/* Es wird ein Attribut mit namen "dev_attr_bargraph" angelegt.				 *
+/*                                                     						 */
+/* Eine besonderheit hier ist, dass diesmal das Attribut nicht nur lesend,	 */
+/* sondern auch schreibend benutzt werden kann. Deshalb wird bei den 		 */
+/* Zugriffs-Modi zusätzlich 'S_IWUGO' (Write+User+Group+Other) und 			 */
+/* als letzter Parameter die Methodenreferenz zu 'set_bargraph' 			 */
+/* als Store-Methode mitgegeben.											 */
+/* 																			 */
+/* Es wird ein Attribut mit namen "dev_attr_bargraph" angelegt.				 */
 /*****************************************************************************/
 static DEVICE_ATTR( bargraph, S_IRUGO | S_IWUGO, show_bargraph, set_bargraph );
 
@@ -500,7 +494,7 @@ static int init_interrupts(struct osrfx2 * fx2dev)
 	// Eine 'Pipe' ist ein Integer, in den Verschiedene Informationen bitweise kodiert sind, wie: 
 	// "device number", "endpoint number", "current data", "speed" und den Typ (control, interrupt, bulk, isochronous).
 	// Die konkrete Kodierung kann in linux/usb.h angeschaut werden.
-    pipe = usb_rcvintpipe(fx2dev->udev, fx2dev->int_in_endpointAddr);
+    pipe = usb_rcvintpipe(fx2dev->udev, fx2dev->int_in_endpointAddr); // Pipe für Control-Transfer
     
     fx2dev->int_in_size = sizeof(struct interrupt_packet);  
     
@@ -534,7 +528,7 @@ static int init_interrupts(struct osrfx2 * fx2dev)
 }
 
 /*****************************************************************************/
-/*          TODO                                                                 */
+/*          TODO                                                             */
 /*****************************************************************************/
 static int init_bulks(struct osrfx2 * fx2dev)
 {
@@ -554,7 +548,7 @@ static int init_bulks(struct osrfx2 * fx2dev)
 }
 
 /*****************************************************************************/
-/* TODO This routine will attempt to locate the required endpoints and            */
+/* TODO This routine will attempt to locate the required endpoints and       */
 /* retain relevant information in the osrfx2 structure instance.             */
 /*****************************************************************************/
 static int find_endpoints(struct osrfx2 * fx2dev)
@@ -602,7 +596,7 @@ static int find_endpoints(struct osrfx2 * fx2dev)
 }
 
 /*****************************************************************************/
-/* TODO                                                                          */
+/* TODO                                                                      */
 /*****************************************************************************/
 static void osrfx2_delete(struct kref * kref)
 {
@@ -627,8 +621,8 @@ static void osrfx2_delete(struct kref * kref)
 }
 
 /*****************************************************************************/
-/* TODO
-osrfx2_open                                                               */
+/* TODO                                                                      */
+/* osrfx2_open                                                               */
 /*                                                                           */
 /* Note:                                                                     */
 /*   The serialization method used below has a side-effect which I don't     */
@@ -717,7 +711,7 @@ static int osrfx2_open(struct inode * inode, struct file * file)
 }
 
 /*****************************************************************************/
-/*          TODO                                                                 */
+/*          TODO                                                             */
 /*****************************************************************************/
 static int osrfx2_release(struct inode * inode, struct file * file)
 {
@@ -748,7 +742,7 @@ static int osrfx2_release(struct inode * inode, struct file * file)
 }
 
 /*****************************************************************************/
-/*     TODO                                                                      */
+/*   Lesezugriff                                                             */
 /*****************************************************************************/
 static ssize_t osrfx2_read(struct file * file, char * buffer, 
                            size_t count, loff_t * ppos)
@@ -760,20 +754,21 @@ static ssize_t osrfx2_read(struct file * file, char * buffer,
 
     fx2dev = (struct osrfx2 *)file->private_data;
 
+    /* Hole die Pipe für den Bulk-Transfer. */
     pipe = usb_rcvbulkpipe(fx2dev->udev, fx2dev->bulk_in_endpointAddr),
 
     /* 
-     *  Do a blocking bulk read to get data from the device 
+     *  Führe einen Bulk-Lesezugriff aus um Daten vom Gerät zu bekommen.
      */
     retval = usb_bulk_msg( fx2dev->udev, 
                            pipe,
-                           fx2dev->bulk_in_buffer,
-                           min(fx2dev->bulk_in_size, count),
-                           &bytes_read, 
-                           10000 );
+                           fx2dev->bulk_in_buffer, // hier werden die gelesenen Daten abgelegt
+                           min(fx2dev->bulk_in_size, count), // die zu sendende Länge
+                           &bytes_read, // die tatsächlich übertragene Länge
+                           10000 ); // timeout
 
     /* 
-     *  If the read was successful, copy the data to userspace 
+     *  Wenn das Lesen erfolgreich war, müssen die Daten zum Userspace kopiert werden.
      */
     if (!retval) {
         if (copy_to_user(buffer, fx2dev->bulk_in_buffer, bytes_read)) {
@@ -784,7 +779,8 @@ static ssize_t osrfx2_read(struct file * file, char * buffer,
         }
         
         /*
-         *  Increment the pending_data counter by the byte count received.
+         *  Hier wird der Counter der gelesenen Bytes runtergezählt.
+         * Siehe Dokumentation zu "pending_data" weiter oben.
          */
         fx2dev->pending_data -= retval;
     }
@@ -793,26 +789,28 @@ static ssize_t osrfx2_read(struct file * file, char * buffer,
 }
 
 /*****************************************************************************/
-/*               TODO                                                            */
+/*    Schreib-Zugriff BULK                                                   */
+/* Diese Hilfsfunktion wird beim Schreiben als asynchroner Callback benutzt. */
+/* Die Funktion wird aufgerufen wenn der Schreibzugriff erfolgreich war.     */
 /*****************************************************************************/
 static void write_bulk_backend(struct urb * urb)
 {
     struct osrfx2 * fx2dev = (struct osrfx2 *)urb->context;
 
     /* 
-     *  Filter sync and async unlink events as non-errors.
+     *  Bestimmte Events sollen nicht als Fehler auftauchen und werden deshalb gefiltert.
      */
     if (urb->status && 
-        !(urb->status == -ENOENT || 
-          urb->status == -ECONNRESET ||
-          urb->status == -ESHUTDOWN)) {
+        !(urb->status == -ENOENT ||         // Wenn einer dieser 
+          urb->status == -ECONNRESET ||     // Events auftritt,
+          urb->status == -ESHUTDOWN)) {     // wird das nicht als Fehler gewertet
         dev_err(&fx2dev->interface->dev, 
                 "%s - non-zero status received: %d\n",
                 __FUNCTION__, urb->status);
     }
 
     /* 
-     *  Free the spent buffer.
+     *  Verschiedene Buffer werden geleert, die beim Schreiben benutzt wurden.
      */
     usb_buffer_free( urb->dev, 
                      urb->transfer_buffer_length, 
@@ -821,7 +819,7 @@ static void write_bulk_backend(struct urb * urb)
 }
 
 /*****************************************************************************/
-/*     TODO                                                                      */
+/*     Schreib-Zugriff                                                       */
 /*****************************************************************************/
 static ssize_t osrfx2_write(struct file * file, const char * user_buffer, 
                             size_t count, loff_t * ppos)
@@ -838,7 +836,7 @@ static ssize_t osrfx2_write(struct file * file, const char * user_buffer,
         return count;
 
     /* 
-     *  Create a urb, and a buffer for it, and copy the data to the urb.
+     *  Erzeuge einen USB Request Block
      */
     urb = usb_alloc_urb(0, GFP_KERNEL);
     if (!urb) {
@@ -846,6 +844,9 @@ static ssize_t osrfx2_write(struct file * file, const char * user_buffer,
         goto error;
     }
 
+    /*
+     * Erzeuge einen Buffer für den URB
+     */
     buf = usb_buffer_alloc( fx2dev->udev, 
                             count, 
                             GFP_KERNEL, 
@@ -855,28 +856,33 @@ static ssize_t osrfx2_write(struct file * file, const char * user_buffer,
         goto error;
     }
 
+    /*
+     * Kopiere die zu schreibenden Daten in den URB-Puffer
+     */ 
     if (copy_from_user(buf, user_buffer, count)) {
         retval = -EFAULT;
         goto error;
     }
 
     /* 
-     *  Initialize the urb properly.
+     * Es wird eine Pipe erzeugt für den Bulk-Sende-Betrieb 
      */
     pipe = usb_sndbulkpipe( fx2dev->udev, fx2dev->bulk_out_endpointAddr );
 
+    // Hier wird der URB initialisiert und konfiguriert
     usb_fill_bulk_urb( urb, 
                        fx2dev->udev,
                        pipe,
-                       buf, 
-                       count, 
-                       write_bulk_backend, 
+                       buf, // die Daten, die transferiert werden
+                       count, // die länge der zu sendenden Daten
+                       write_bulk_backend, // Funktionsreferenz, 
+                            //die aufgerufen wird nachdem das Senden erfolgreich war.
                        fx2dev );
 
     urb->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
 
     /* 
-     *  Send the data out the bulk port
+     *  Sende den URB an das Gerät. 
      */
     retval = usb_submit_urb(urb, GFP_KERNEL);
     if (retval) {
@@ -886,13 +892,12 @@ static ssize_t osrfx2_write(struct file * file, const char * user_buffer,
     }
 
     /*
-     *  Increment the pending_data counter by the byte count sent.
+     *  Der pending_data Zähler wird hochgezählt.
      */
     fx2dev->pending_data += count;
 
     /* 
-     *  Release the reference to this urb, the USB core
-     *  will eventually free it entirely.
+     *  Der URB kann wieder freigegeben werden.
      */
     usb_free_urb(urb);
 
@@ -905,34 +910,36 @@ error:
 }
 
 /*****************************************************************************/
-/* TODO                                                                          */
+/* Polling-Zugriff um abzufragen, ob gelesen bzw. geschrieben werden kann    */
 /*****************************************************************************/
 static unsigned int osrfx2_poll(struct file * file, poll_table * wait)
 {
     struct osrfx2 * fx2dev = (struct osrfx2 *)file->private_data;
     unsigned int mask = 0;
     int retval = 0;
-
+    
+    // Der Semaphore wird aktiviert
     retval = down_interruptible( &fx2dev->sem );
     
     poll_wait(file, &fx2dev->FieldEventQueue, wait);
 
     if ( fx2dev->notify == TRUE ) {
         fx2dev->notify = FALSE;
-        mask |= POLLPRI;
+        mask |= POLLPRI;  //High-Priority. Daten können ohne Blockieren gelesen werden.
     }
 
     if ( fx2dev->pending_data > 0) {
-        mask |= POLLIN | POLLRDNORM;
+        mask |= POLLIN | POLLRDNORM; // Es kann gelesen werden
     }
-
+    
+    // Der Semaphore wird wieder freigegeben
     up( &fx2dev->sem );
     
     return mask;
 }
 
 /*****************************************************************************/
-/* Die File-Operationen, die von diesem Treiber unterstützt werden. 		*/
+/* Die File-Operationen, die von diesem Treiber unterstützt werden. 		 */
 /*****************************************************************************/
 static struct file_operations osrfx2_file_ops = {
     .owner   = THIS_MODULE,
@@ -944,9 +951,9 @@ static struct file_operations osrfx2_file_ops = {
 };
  
 /*****************************************************************************/
-/* Klasse zur identifikation des USB Treibers. Es werden die unterstützten	*/
-/* File-Operationen, der Geräte-Name und die Minor-Nummer vom USB core 		*/
-/* angegeben.																*/
+/* Klasse zur identifikation des USB Treibers. Es werden die unterstützten	 */
+/* File-Operationen, der Geräte-Name und die Minor-Nummer vom USB core 		 */
+/* angegeben.																 */
 /*****************************************************************************/
 static struct usb_class_driver osrfx2_class = {
     .name       = "device/osrfx2_%d",
@@ -955,8 +962,8 @@ static struct usb_class_driver osrfx2_class = {
 };
 
 /*****************************************************************************/
-/* Event: Prüfung ob das Gerät bestimmte Funktionen unterstüzt und von		*/
-/* diesem Treiber bedient werden kann.										*/
+/* Event: Prüfung ob das Gerät bestimmte Funktionen unterstüzt und von		 */
+/* diesem Treiber bedient werden kann.										 */
 /*****************************************************************************/
 static int osrfx2_probe(struct usb_interface * interface, 
                         const struct usb_device_id * id)
@@ -1030,6 +1037,7 @@ static void osrfx2_disconnect(struct usb_interface * interface)
 
     fx2dev = usb_get_intfdata(interface);
 
+    // Der Interrupt-Lese URB wird gestoppt
     usb_kill_urb(fx2dev->int_in_urb);
     
     usb_set_intfdata(interface, NULL);
@@ -1062,7 +1070,7 @@ static int osrfx2_suspend(struct usb_interface * intf, pm_message_t message)
     fx2dev->suspended = TRUE;
 
     /* 
-     *  Stop the interrupt pipe read urb.
+     *  Der Interrupt-Lese URB wird gestoppt.
      */
     usb_kill_urb(fx2dev->int_in_urb);
 
@@ -1081,6 +1089,7 @@ static int osrfx2_resume(struct usb_interface * intf)
 
     dev_info(&intf->dev, "%s - entry\n", __FUNCTION__);
 
+    // Setzen des Semaphore
     if (down_interruptible(&fx2dev->sem)) {
         return -ERESTARTSYS;
     }
@@ -1088,7 +1097,7 @@ static int osrfx2_resume(struct usb_interface * intf)
     fx2dev->suspended = FALSE;
 
     /* 
-     *  Re-start the interrupt pipe read urb.
+     *  Der Interrupt-Lese URB wird neu initialisiert
      */
     retval = usb_submit_urb( fx2dev->int_in_urb, GFP_KERNEL );
     
@@ -1109,15 +1118,16 @@ static int osrfx2_resume(struct usb_interface * intf)
         }
     }
     
+    // Freilassen des Semaphores
     up(&fx2dev->sem);
 
     return 0;
 }
 
 /*****************************************************************************/
-/* Die Treiber-Struktur des USB Treibers mit den Referenzen auf				*/
-/* die entsprechenden methoden. Dieses Struct wird zum initialisieren		*/
-/* und deinitialisieren benötigt.											*/
+/* Die Treiber-Struktur des USB Treibers mit den Referenzen auf				 */
+/* die entsprechenden methoden. Dieses Struct wird zum initialisieren		 */
+/* und deinitialisieren benötigt.											 */
 /*****************************************************************************/
 static struct usb_driver osrfx2_driver = {
     .name        = "osrfx2",
@@ -1129,7 +1139,7 @@ static struct usb_driver osrfx2_driver = {
 };
 
 /*****************************************************************************/
-/* Die init methode registriert den Treiber beim USB subsystem  			*/
+/* Die init methode registriert den Treiber beim USB subsystem  			 */
 /*****************************************************************************/
 static int __init osrfx2_init(void)
 {
@@ -1141,7 +1151,7 @@ static int __init osrfx2_init(void)
 }
 
 /*****************************************************************************/
-/* Die exit methode deregistriert den Treiber vom USB subsystem 			*/
+/* Die exit methode deregistriert den Treiber vom USB subsystem 			 */
 /*****************************************************************************/
 static void __exit osrfx2_exit(void)
 {
