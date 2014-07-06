@@ -35,7 +35,7 @@
 #define FALSE (0)
 
 /*****************************************************************************/
-/* Die Kommandos, die das OSR-FX2 unterstützt.                               */
+/* Die Kommandos, die das OSR-FX2 (noch) unterstützt.                        */
 /*****************************************************************************/
 #define OSRFX2_READ_SWITCHES              0xD6
 #define OSRFX2_READ_BARGRAPH_DISPLAY      0xD7
@@ -226,8 +226,6 @@ struct interrupt_packet {
 /*****************************************************************************/
 /* Mit dieser Methode wird der Zustand der Schalter-Leiste abgefragt und     */
 /* als formatierter String (return param buf) zurück gegeben.                */
-/*                                                                           */
-/* Note the two different function defintions depending on kernel version.   */
 /*****************************************************************************/
 static ssize_t show_switches(struct device * dev, 
                              struct device_attribute * attr, 
@@ -238,22 +236,24 @@ static ssize_t show_switches(struct device * dev,
     struct switches_state  * packet;
     int retval;
 
+    // Kernel-Speicher reservieren für das Ergebnis (als switch_state struktur)
     packet = kmalloc(sizeof(*packet), GFP_KERNEL);
     if (!packet) {
         return -ENOMEM;
     }
-    packet->SwitchesOctet = 0;
+    packet->SwitchesOctet = 0; // Überschreiben der Struktur damit kein Datenmüll drin steht
 
 	// Hier wird der Zustand der Schalter vom Gerät abgefragt
+    // dazu wird eine Control-Message gesendet
     retval = usb_control_msg(fx2dev->udev, 
-                             usb_rcvctrlpipe(fx2dev->udev, 0), 
-                             OSRFX2_READ_SWITCHES, 
-                             USB_DIR_IN | USB_TYPE_VENDOR,
-                             0,
-                             0,
-                             packet, 
-                             sizeof(*packet),
-                             USB_CTRL_GET_TIMEOUT);
+                             usb_rcvctrlpipe(fx2dev->udev, 0), // inline erzeugung der Pipe, die zum Empfangen des Werts benutzt wird
+                             OSRFX2_READ_SWITCHES, // das Kommando als request value
+                             USB_DIR_IN | USB_TYPE_VENDOR, // request Typen
+                             0, // message value
+                             0, // message index value
+                             packet, // die Daten die gesendet werden
+                             sizeof(*packet), // länge der Daten
+                             USB_CTRL_GET_TIMEOUT); // timeout
 
     if (retval < 0) {
         dev_err(&fx2dev->udev->dev, "%s - retval=%d\n", __FUNCTION__, retval);
@@ -272,7 +272,7 @@ static ssize_t show_switches(struct device * dev,
                      (packet->Switch7) ? "*" : ".",
                      (packet->Switch8) ? "*" : "." );
 
-    kfree(packet);
+    kfree(packet); // Kernel-Speicher muss wieder freigegeben werden.
 
     return retval;
 }
@@ -312,6 +312,7 @@ static ssize_t show_bargraph(struct device * dev,
     struct bargraph_state * packet;
     int retval;
 
+    // Kernel-Speicher reservieren für das Ergebnis
     packet = kmalloc(sizeof(*packet), GFP_KERNEL);
     if (!packet) {
         return -ENOMEM;
@@ -319,6 +320,8 @@ static ssize_t show_bargraph(struct device * dev,
     packet->BarsOctet = 0;
 	
 	// Einlesen des Zustands der LED-Leiste vom Gerät
+    // Dazu wird eine USB Control message gesendet. Die Parameter sind äquivalent
+    // zu denen in der Methode 'show_switches' weiter oben. Für genaue Doku bitte dort nachsehen.
     retval = usb_control_msg(fx2dev->udev, 
                              usb_rcvctrlpipe(fx2dev->udev, 0), 
                              OSRFX2_READ_BARGRAPH_DISPLAY, 
@@ -368,6 +371,7 @@ static ssize_t set_bargraph(struct device * dev,
     int retval;
     char * end;
 
+    // Kernel-Speicher für das Datenpaket reservieren
     packet = kmalloc(sizeof(*packet), GFP_KERNEL);
     if (!packet) {
         return -ENOMEM;
@@ -392,13 +396,13 @@ static ssize_t set_bargraph(struct device * dev,
 
 	// Nun wird die Bargraph-Struktur mit den zu setzenden Werten an das USB-Gerät gesendet
     retval = usb_control_msg(fx2dev->udev, 
-                             usb_sndctrlpipe(fx2dev->udev, 0), 
-                             OSRFX2_SET_BARGRAPH_DISPLAY, 
-                             USB_DIR_OUT | USB_TYPE_VENDOR,
+                             usb_sndctrlpipe(fx2dev->udev, 0),  // die USB pipe zum Senden
+                             OSRFX2_SET_BARGRAPH_DISPLAY,  // Kommando als request Value
+                             USB_DIR_OUT | USB_TYPE_VENDOR, // Request typen
                              0,
                              0,
-                             packet, 
-                             sizeof(*packet),
+                             packet,  // die Daten werden gesendet
+                             sizeof(*packet), 
                              USB_CTRL_GET_TIMEOUT);
 
     if (retval < 0) {
@@ -463,17 +467,17 @@ static void interrupt_handler(struct urb * urb)
         }
 
         /* 
-         *  Successful completion 
+         * Erfolgreich
          */
         return;   
     } 
 	
 	/* Es gab wohl einen Fehler. Wenn der Return-Code bekannt ist, wird still returnt. Andernfalls wird eine Fehlermeldung ausgegeben.*/
     switch (urb->status) {
-        case -ECONNRESET:
-        case -ENOENT:
-        case -ESHUTDOWN:
-            return;
+        case -ECONNRESET:   // diese Fehlercodes...
+        case -ENOENT:       // sind bekannt und "normal" ...
+        case -ESHUTDOWN:    // und werden daher nicht näher betrachtet ...
+            return;         // sondern es wird still returned.
         default: 
             dev_err(&urb->dev->dev, "%s - non-zero urb status received: %d\n", 
                     __FUNCTION__, urb->status);
@@ -496,13 +500,16 @@ static int init_interrupts(struct osrfx2 * fx2dev)
 	// Die konkrete Kodierung kann in linux/usb.h angeschaut werden.
     pipe = usb_rcvintpipe(fx2dev->udev, fx2dev->int_in_endpointAddr); // Pipe für Control-Transfer
     
+    // die Größe des Interrupt pakets wird gemerkt
     fx2dev->int_in_size = sizeof(struct interrupt_packet);  
     
+    // für den Puffer wird Kernel-Speicher reserviert
     fx2dev->int_in_buffer = kmalloc(fx2dev->int_in_size, GFP_KERNEL);
     if (!fx2dev->int_in_buffer) {
         return -ENOMEM;
     }
 
+    // anlegen eines neuen URBs
     fx2dev->int_in_urb = usb_alloc_urb(0, GFP_KERNEL);
     if (!fx2dev->int_in_urb) {
         return -ENOMEM;
@@ -518,6 +525,7 @@ static int init_interrupts(struct osrfx2 * fx2dev)
                       fx2dev,					// Der Geräte-Kontext, in dem der URB gesetzt wird
                       fx2dev->int_in_endpointInterval );	// Der Intervall des URBs
 
+    // absetzen des asynchronen URBs
     retval = usb_submit_urb( fx2dev->int_in_urb, GFP_KERNEL );
     if (retval != 0) {
         dev_err(&fx2dev->udev->dev, "usb_submit_urb error %d \n", retval);
@@ -528,19 +536,23 @@ static int init_interrupts(struct osrfx2 * fx2dev)
 }
 
 /*****************************************************************************/
-/*          TODO                                                             */
+/* Damit der BULK-Transfer funktioniert muss er initialisiert werden.        */
 /*****************************************************************************/
 static int init_bulks(struct osrfx2 * fx2dev)
 {
+    // reserviere Kernel-Speicher für den Input-Puffer
     fx2dev->bulk_in_buffer = kmalloc(fx2dev->bulk_in_size, GFP_KERNEL);
     if (!fx2dev->bulk_in_buffer) {
         return -ENOMEM;
     }
+    
+    // reserviere Kernel-Speicher für den Output-Puffer
     fx2dev->bulk_out_buffer = kmalloc(fx2dev->bulk_out_size, GFP_KERNEL);
     if (!fx2dev->bulk_out_buffer) {
         return -ENOMEM;
     }
-
+    
+    // Initialisierung des Semaphores und der EventQueue
     init_MUTEX( &fx2dev->sem );
     init_waitqueue_head( &fx2dev->FieldEventQueue );
 
@@ -548,8 +560,9 @@ static int init_bulks(struct osrfx2 * fx2dev)
 }
 
 /*****************************************************************************/
-/* TODO This routine will attempt to locate the required endpoints and       */
-/* retain relevant information in the osrfx2 structure instance.             */
+/* Diese Methode versucht die benötigten Endpunkte der Platine zu finden und */
+/* die notwendigen Informationen über die Endpunkte in der mitgegebenen      */
+/* osrfx2 struktur abzulegen                                                 */
 /*****************************************************************************/
 static int find_endpoints(struct osrfx2 * fx2dev)
 {
@@ -559,23 +572,28 @@ static int find_endpoints(struct osrfx2 * fx2dev)
     unsigned char attr;
     int i;
 
+    // Anzahl der Iterationen entspricht der Anzahl an Endpoints der aktuellen Alternative
     for (i=0; i < interface->cur_altsetting->desc.bNumEndpoints; i++) {
-
+    
+        // der aktuelle Endpoint
         endpoint = &interface->cur_altsetting->endpoint[i].desc;
         dir  = endpoint->bEndpointAddress & USB_DIR_IN;
         attr = endpoint->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK;
 
         switch ((dir << 8) + attr) {
+            // Endpoint unterstützt Interrupt-Transfer
             case ((USB_DIR_IN << 8) + USB_ENDPOINT_XFER_INT) :
                 fx2dev->int_in_endpointAddr = endpoint->bEndpointAddress;
                 fx2dev->int_in_endpointInterval = endpoint->bInterval;
                 fx2dev->int_in_size = endpoint->wMaxPacketSize;
                 break;
+            // Endpoint unterstützt Bulk-Transfer zur Eingabe
             case ((USB_DIR_IN << 8) + USB_ENDPOINT_XFER_BULK) :
                 fx2dev->bulk_in_endpointAddr = endpoint->bEndpointAddress;
                 fx2dev->bulk_in_endpointInterval = endpoint->bInterval;
                 fx2dev->bulk_in_size = endpoint->wMaxPacketSize;
                 break;
+            // Endpoint unterstützt Bulk-Transfer zur Ausgabe
             case ((USB_DIR_OUT << 8) + USB_ENDPOINT_XFER_BULK) :
                 fx2dev->bulk_out_endpointAddr = endpoint->bEndpointAddress;
                 fx2dev->bulk_out_endpointInterval = endpoint->bInterval;
@@ -585,6 +603,8 @@ static int find_endpoints(struct osrfx2 * fx2dev)
                 break;
         }
     }
+
+    // wenn mindestens einer der Endpunkte nicht gefunden wurde wird ein Fehler geworfen
     if (fx2dev->int_in_endpointAddr   == 0 || 
         fx2dev->bulk_in_endpointAddr  == 0 ||
         fx2dev->bulk_out_endpointAddr == 0) {
@@ -596,14 +616,22 @@ static int find_endpoints(struct osrfx2 * fx2dev)
 }
 
 /*****************************************************************************/
-/* TODO                                                                      */
+/* Die Funktion wird benutzt um das USB-Gerät freizugeben                    */
+/* und allen reservierten Speicher, der noch reserviert ist,                 */ 
+/* ebenfalls freizugeben.                                                    */
+/* Beim Aufruf muss die kref der osrfx2-Struktur übergeben werden.           */
 /*****************************************************************************/
 static void osrfx2_delete(struct kref * kref)
-{
+{   
+    // hiermit wird die instanz der Struktur geholt, die die kref enthält.
     struct osrfx2 * fx2dev = container_of(kref, struct osrfx2, kref);
+    
 
+    // damit wird das USB Gerät freigegeben
     usb_put_dev( fx2dev->udev );
     
+    // hier werden noch jeweils die reservierten Speicherbereiche freigegeben
+
     if (fx2dev->int_in_urb) {
         usb_free_urb(fx2dev->int_in_urb);
     }
@@ -616,7 +644,8 @@ static void osrfx2_delete(struct kref * kref)
     if (fx2dev->bulk_out_buffer) {
         kfree( fx2dev->bulk_out_buffer );
     }
-
+    
+    // schließlich wird der Speicher der Struktur selbst freigegeben
     kfree( fx2dev );
 }
 
@@ -698,7 +727,7 @@ static int osrfx2_open(struct inode * inode, struct file * file)
     }
 
     /*
-     *   Increment our usage count for the device.
+     *   Der Kref Referenzzähler wird hochgezählt.
      */
     kref_get(&fx2dev->kref);
 
@@ -978,6 +1007,7 @@ static int osrfx2_probe(struct usb_interface * interface,
         goto error;
     }
     memset(fx2dev, 0, sizeof(*fx2dev));
+    // Der Referenz-counter muss initialisiert werden. Er hat danach den Wert 1.
     kref_init( &fx2dev->kref );
 
     fx2dev->udev = usb_get_dev(udev);
