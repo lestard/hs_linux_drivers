@@ -650,8 +650,7 @@ static void osrfx2_delete(struct kref * kref)
 }
 
 /*****************************************************************************/
-/* TODO                                                                      */
-/* osrfx2_open                                                               */
+/* Die Funktion wird aufgerufen, wenn die Treiberdatei geöffnet wird.        */
 /*                                                                           */
 /* Note:                                                                     */
 /*   The serialization method used below has a side-effect which I don't     */
@@ -671,20 +670,21 @@ static int osrfx2_open(struct inode * inode, struct file * file)
     int retval;
     int flags;
     
+    // Sucht den USB-Bus ab nach dem Interface ab
     interface = usb_find_interface(&osrfx2_driver, iminor(inode));
     if (interface == NULL) 
         return -ENODEV;
 
+    // hole die zu dem Interface-Pointer gehörende Treiber-Struktur
     fx2dev = usb_get_intfdata(interface);
     if (fx2dev == NULL) 
         return -ENODEV;
 
-    /*
-     *   Serialize access to each of the bulk pipes.
-     */ 
     flags = (file->f_flags & O_ACCMODE);
 
+    // prüfe ob Schreibzugriff erlaubt ist.
     if ((flags == O_WRONLY) || (flags == O_RDWR)) {
+        // Stelle sicher, dass noch eine Bulk-Pipe verfügbar ist.
         if (atomic_dec_and_test( &fx2dev->bulk_write_available ) == 0) {
             atomic_inc( &fx2dev->bulk_write_available );
             return -EBUSY;
@@ -693,6 +693,7 @@ static int osrfx2_open(struct inode * inode, struct file * file)
         /*
          *   The write interface is serialized, so reset bulk-out pipe (ep-6).
          */
+        // Der Bulk-Endpoint für die Ausgabe wird zurückgesetzt.
         retval = usb_clear_halt(fx2dev->udev, fx2dev->bulk_out_endpointAddr);
         if ((retval != 0) && (retval != -EPIPE)) {
             dev_err(&interface->dev, "%s - error(%d) usb_clear_halt(%02X)\n", 
@@ -700,7 +701,9 @@ static int osrfx2_open(struct inode * inode, struct file * file)
         }
     }
 
+    // prüfe ob Lesezugriff erlaubt ist.
     if ((flags == O_RDONLY) || (flags == O_RDWR)) {
+        // prüfe ob eine Bulk-Pipe für Lesezugriff noch verfügbar ist
         if (atomic_dec_and_test( &fx2dev->bulk_read_available ) == 0) {
             atomic_inc( &fx2dev->bulk_read_available );
             if (flags == O_RDWR) 
@@ -711,6 +714,7 @@ static int osrfx2_open(struct inode * inode, struct file * file)
         /*
          *   The read interface is serialized, so reset bulk-in pipe (ep-8).
          */
+        // Der Bulk-Endpoint für die Eingabe wird zurückgesetzt.
         retval = usb_clear_halt(fx2dev->udev, fx2dev->bulk_in_endpointAddr);
         if ((retval != 0) && (retval != -EPIPE)) {
             dev_err(&interface->dev, "%s - error(%d) usb_clear_halt(%02X)\n", 
@@ -721,6 +725,7 @@ static int osrfx2_open(struct inode * inode, struct file * file)
     /*
      *   Set this device as non-seekable.
      */ 
+    // markiert die Datei als undurchsuchbar
     retval = nonseekable_open(inode, file);
     if (retval != 0) {
         return retval;
@@ -734,13 +739,15 @@ static int osrfx2_open(struct inode * inode, struct file * file)
     /*
      *   Save pointer to device instance in the file's private structure.
      */
+    // merkt sich die Treiber-Instanz in der Datei-Struktur
     file->private_data = fx2dev;
 
     return 0;
 }
 
 /*****************************************************************************/
-/*          TODO                                                             */
+/* Die Funktion wird aufgerufen,                                             */
+/* wenn die Treiber-Datei wieder freigegeben wird.                           */
 /*****************************************************************************/
 static int osrfx2_release(struct inode * inode, struct file * file)
 {
@@ -1014,33 +1021,43 @@ static int osrfx2_probe(struct usb_interface * interface,
     fx2dev->interface = interface;
     fx2dev->suspended = FALSE;
 
+    // initialisiere die counter für den Bulk-Zugriff
     fx2dev->bulk_write_available = (atomic_t) ATOMIC_INIT(1);
     fx2dev->bulk_read_available  = (atomic_t) ATOMIC_INIT(1);
 
     usb_set_intfdata(interface, fx2dev);
-
+    
+    // lege die Attribut-Datei für das Geräte-Attribut für die Schalterleiste an
     retval = device_create_file(&interface->dev, &dev_attr_switches);
     if (retval != 0) 
         goto error;
 	
+    //  lege die Attribut-Datei für das Geräte-Attribut für die LED-Leiste an
     retval = device_create_file(&interface->dev, &dev_attr_bargraph);
     if (retval != 0) 
         goto error;
 
+    // suche alle unterstützen Endpoints
     retval = find_endpoints( fx2dev );
     if (retval != 0) 
         goto error;
     
+    // initialisiere die Interrupt-Transfers für das Gerät
     retval = init_interrupts( fx2dev );
     if (retval != 0)
         goto error;
-
+    
+    // initialisiere die Bulk-Transfers für das Gerät
     retval = init_bulks( fx2dev );
     if (retval != 0)
         goto error;
 
+    // registriere das USB-Gerät am USB-Subsystem
     retval = usb_register_dev(interface, &osrfx2_class);
+    
+    // wenn etwas schief gegangen ist...
     if (retval != 0) {
+        // setze das Interface zurück.
         usb_set_intfdata(interface, NULL);
     }
 
@@ -1063,6 +1080,7 @@ static void osrfx2_disconnect(struct usb_interface * interface)
 {
     struct osrfx2 * fx2dev;
 
+    // Setzen des Big-Kernel-Lock (für neuere Kernel-Versionen ist dieser Aufruf verboten)
     lock_kernel();
 
     fx2dev = usb_get_intfdata(interface);
@@ -1070,13 +1088,17 @@ static void osrfx2_disconnect(struct usb_interface * interface)
     // Der Interrupt-Lese URB wird gestoppt
     usb_kill_urb(fx2dev->int_in_urb);
     
+    // Das USB-Interface wird zurückgesetzt.
     usb_set_intfdata(interface, NULL);
 
+    // die beiden Attribut-Dateien müssen wieder entfernt werden.
     device_remove_file(&interface->dev, &dev_attr_switches);
     device_remove_file(&interface->dev, &dev_attr_bargraph);
 
+    // Die USB-Klasse wird vom USB-Subsystem de-registriert
     usb_deregister_dev(interface, &osrfx2_class);
 
+    // Freigeben des Big-Kernel-Lock
     unlock_kernel();
 
     kref_put( &fx2dev->kref, osrfx2_delete );
@@ -1092,18 +1114,21 @@ static int osrfx2_suspend(struct usb_interface * intf, pm_message_t message)
     struct osrfx2 * fx2dev = usb_get_intfdata(intf);
 
     dev_info(&intf->dev, "%s - entry\n", __FUNCTION__);
-
+    
+    // Semaphor wird gesetzt
     if (down_interruptible(&fx2dev->sem)) {
         return -ERESTARTSYS;
     }
 
+    // merkt sich den Suspended-Modus in der internen Treiber-Struktur
     fx2dev->suspended = TRUE;
 
     /* 
      *  Der Interrupt-Lese URB wird gestoppt.
      */
     usb_kill_urb(fx2dev->int_in_urb);
-
+    
+    // Semaphor wird freigegeben
     up(&fx2dev->sem);
 
     return 0;
@@ -1124,6 +1149,7 @@ static int osrfx2_resume(struct usb_interface * intf)
         return -ERESTARTSYS;
     }
     
+    // merkt sich den Suspended-Modus in der internen Treiber-Struktur
     fx2dev->suspended = FALSE;
 
     /* 
@@ -1161,7 +1187,7 @@ static int osrfx2_resume(struct usb_interface * intf)
 /*****************************************************************************/
 static struct usb_driver osrfx2_driver = {
     .name        = "osrfx2",
-    .probe       = osrfx2_probe, //enter
+    .probe       = osrfx2_probe, 
     .disconnect  = osrfx2_disconnect,
     .suspend     = osrfx2_suspend,
     .resume      = osrfx2_resume,
